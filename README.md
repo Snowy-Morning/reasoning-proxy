@@ -38,6 +38,7 @@
 
 ```text
 proxy.js       代理主程序
+config.bat     配置文件（目标 IP、端口、推理等级）
 start.bat      Windows 启动脚本
 proxy.log      运行日志，启动后自动追加
 proxy.err.log  预留的错误日志文件
@@ -62,19 +63,20 @@ node --version
 ```text
 proxy.js
 start.bat
+config.bat
 ```
 
 日志文件不是必须的；如果一起复制，程序会继续向现有日志追加内容。
 
-### 3. 确认网络条件
+### 3. 修改配置并确认网络条件
 
-新电脑必须能够访问上游服务：
+按需编辑 `config.bat`，确认上游地址和推理等级。新电脑必须能够访问配置的上游服务：
 
 ```text
 10.0.8.19:80
 ```
 
-如果目标服务器、端口或网络环境不同，需要按下面的配置方式修改，不要直接假设原来的内网地址仍然可用。
+如果目标服务器、端口或网络环境不同，直接修改 `config.bat` 中的 `TARGET_HOST` 和 `TARGET_PORT`。
 
 ### 4. 启动代理
 
@@ -114,7 +116,21 @@ POST http://10.0.8.19:80/v1/chat/completions
 
 ## 配置
 
-可以通过环境变量覆盖默认值。
+推荐方式：直接编辑项目根目录的 `config.bat`，然后重新运行 `start.bat` 即可生效。
+
+```bat
+rem 本地监听端口
+set PROXY_PORT=3120
+
+rem 上游服务器地址与端口
+set TARGET_HOST=10.0.8.19
+set TARGET_PORT=80
+
+rem 默认推理强度（low / medium / high）
+set REASONING_EFFORT=high
+```
+
+也可以不使用配置文件，通过环境变量临时覆盖。
 
 ### PowerShell
 
@@ -145,7 +161,7 @@ node proxy.js
 | `TARGET_PORT` | `80` | 上游服务器端口 |
 | `REASONING_EFFORT` | `high` | 缺少字段时注入的默认推理强度 |
 
-注意：`start.bat` 中的端口占用检查固定检查 `3120`。如果把 `PROXY_PORT` 改成其他端口，建议直接使用 `node .\proxy.js` 启动，或同步修改启动脚本中的检查逻辑和提示文本。
+`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。如果配置文件不存在，程序会使用上表中的内置默认值。
 
 ## 简单验证
 
