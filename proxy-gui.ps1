@@ -601,7 +601,7 @@ $script:mainPanel = $mainPanel
 $script:logPanel = $logPanel
 $script:logTextBox = $logTextBox
 
-$script:effortLevels = @('minimal', 'low', 'medium', 'high', 'max')
+$script:effortLevels = @('low', 'medium', 'high', 'max')
 $script:effortButtons = @()
 $effortPanel = $window.FindName('EffortButtons')
 foreach ($level in $script:effortLevels) {

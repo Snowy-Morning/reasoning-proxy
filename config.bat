@@ -9,7 +9,7 @@ rem 上游服务器地址与端口
 set TARGET_HOST=10.0.8.19
 set TARGET_PORT=80
 
-rem 默认推理强度（minimal / low / medium / high / max）
+rem 默认推理强度（low / medium / high / max）
 set REASONING_EFFORT=high
 
 rem Kimi 推理模型只允许 temperature=1，可在此调整
