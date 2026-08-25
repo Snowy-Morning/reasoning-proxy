@@ -43,8 +43,9 @@ config.bat     配置文件（目标 IP、端口、推理等级、Kimi 参数）
 start.bat      Windows 启动脚本
 start-background.ps1  后台启动辅助脚本
 stop.bat       Windows 停止脚本
-proxy.log      运行日志，启动后自动追加
-proxy.err.log  错误日志，后台运行时自动追加
+gui.vbs        无控制台图形界面启动脚本
+proxy-gui.ps1  图形界面主程序
+logo.png / logo.ico  界面与托盘图标
 ```
 
 ## 迁移到新电脑
@@ -68,6 +69,10 @@ proxy.js
 start.bat
 start-background.ps1
 stop.bat
+gui.vbs
+proxy-gui.ps1
+logo.png
+logo.ico
 config.bat
 ```
 
@@ -85,7 +90,9 @@ config.bat
 
 ### 4. 启动代理
 
-双击 `start.bat`。代理会在后台运行，启动窗口几秒后会自动关闭，关闭窗口不影响代理继续运行。需要停止时双击 `stop.bat` 即可。
+双击 `gui.vbs` 可以打开深色图形界面，不会弹出 cmd 窗口。界面会显示运行状态、本地/目标地址和 Kimi 参数，并提供启动/停止按钮，窗口和托盘均使用 `logo` 图标。关闭界面窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可以选择退出界面（不停止代理）。
+
+也可以双击 `start.bat` 直接后台启动，不打开界面。代理会在后台运行，启动窗口几秒后会自动关闭。需要停止时双击 `stop.bat` 即可。
 
 如果需要在前台调试，也可以在项目目录执行：
 
@@ -251,7 +258,7 @@ Kimi 的推理模型只接受 `temperature=1` 和 `top_p=0.95`，而 VS Code Cop
 
 ## 停止服务
 
-后台运行时没有可直接关闭的窗口，双击 `stop.bat` 会按配置的端口找到代理进程并结束。
+后台运行时没有可直接关闭的窗口，双击 `stop.bat` 会按配置的端口找到代理进程并结束，也可以在图形界面中点击“停止代理”。
 
 也可以手动执行：
 
