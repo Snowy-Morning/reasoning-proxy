@@ -435,13 +435,14 @@ $xaml = @'
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontFamily" Value="Consolas"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Padding" Value="0,4"/>
             <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="Transparent" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
