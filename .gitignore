@@ -1,6 +1,5 @@
 # 运行日志
-proxy.log
-proxy.err.log
+logs/
 *.log
 
 # 系统文件

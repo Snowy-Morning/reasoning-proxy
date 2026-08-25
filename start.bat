@@ -11,7 +11,7 @@ if %errorlevel%==0 (
 )
 echo [proxy] Starting reasoning proxy in background on http://127.0.0.1:%PROXY_PORT% ...
 echo [proxy] Target: %TARGET_HOST%:%TARGET_PORT%, reasoning_effort=%REASONING_EFFORT%, kimi_temperature=%KIMI_TEMPERATURE%, kimi_top_p=%KIMI_TOP_P%
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-background.ps1" -ProxyPath "%~dp0proxy.js" -WorkingDirectory "%CD%" -LogPath "%~dp0proxy.log" -ErrLogPath "%~dp0proxy.err.log"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-background.ps1" -ProxyPath "%~dp0proxy.js" -WorkingDirectory "%CD%" -LogPath "%~dp0logs\proxy.log" -ErrLogPath "%~dp0logs\proxy.err.log"
 echo [proxy] Started in background. This window can be closed.
 ping 127.0.0.1 -n 4 >nul
 exit /b 0

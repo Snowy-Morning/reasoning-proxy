@@ -47,8 +47,8 @@ start-background.ps1  后台启动辅助脚本
 stop.bat       Windows 停止脚本
 gui.vbs        无控制台图形界面启动脚本
 proxy-gui.ps1  图形界面主程序
-logo.png / logo.ico  界面与托盘图标
-proxy.log / proxy.err.log  运行日志与错误日志
+assets/        图标资源（logo.png / logo.ico）
+logs/          运行日志（proxy.log / proxy.err.log）
 ```
 
 ## 迁移到新电脑
@@ -74,12 +74,12 @@ start-background.ps1
 stop.bat
 gui.vbs
 proxy-gui.ps1
-logo.png
-logo.ico
+assets\logo.png
+assets\logo.ico
 config.bat
 ```
 
-日志文件不是必须的；如果一起复制，程序会继续向现有日志追加内容。
+`logs` 目录不是必须的；如果一起复制，程序会继续向现有日志追加内容。
 
 ### 3. 修改配置并确认网络条件
 
@@ -110,7 +110,7 @@ config.bat
 node .\proxy.js
 ```
 
-后台启动后，`proxy.log` 中会出现类似下面的内容，表示本地代理已经启动：
+后台启动后，`logs\proxy.log` 中会出现类似下面的内容，表示本地代理已经启动：
 
 ```text
 [proxy] listening on http://127.0.0.1:3120
@@ -199,7 +199,7 @@ node proxy.js
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 | `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
+`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `logs\proxy.log` 和 `logs\proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
 
 ## 简单验证
 
