@@ -545,11 +545,7 @@ $xaml = @'
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="目标地址" Foreground="#949EB4" Margin="0,6,0,6"/>
                             <TextBlock x:Name="TargetValue" Grid.Row="1" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" Margin="0,6,0,6"/>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="推理等级" Foreground="#949EB4" Margin="0,6,0,6"/>
-                            <StackPanel x:Name="EffortButtons" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,6">
-                                <Button x:Name="EffortLow" Style="{StaticResource EffortButton}" Content="low" Tag="low"/>
-                                <Button x:Name="EffortMedium" Style="{StaticResource EffortButton}" Content="medium" Tag="medium"/>
-                                <Button x:Name="EffortHigh" Style="{StaticResource EffortButton}" Content="high" Tag="high"/>
-                            </StackPanel>
+                            <StackPanel x:Name="EffortButtons" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,6"/>
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Kimi 参数" Foreground="#949EB4" Margin="0,6,0,6"/>
                             <TextBlock x:Name="KimiValue" Grid.Row="3" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" Margin="0,6,0,6"/>
                         </Grid>
@@ -591,9 +587,6 @@ $pidText = $window.FindName('PidText')
 $startButton = $window.FindName('StartButton')
 $stopButton = $window.FindName('StopButton')
 $logToggleButton = $window.FindName('LogToggleButton')
-$effortLow = $window.FindName('EffortLow')
-$effortMedium = $window.FindName('EffortMedium')
-$effortHigh = $window.FindName('EffortHigh')
 $mainPanel = $window.FindName('MainPanel')
 $logPanel = $window.FindName('LogPanel')
 $logTextBox = $window.FindName('LogTextBox')
@@ -604,10 +597,23 @@ $script:pidText = $pidText
 $script:startButton = $startButton
 $script:stopButton = $stopButton
 $script:logToggleButton = $logToggleButton
-$script:effortButtons = @($effortLow, $effortMedium, $effortHigh)
 $script:mainPanel = $mainPanel
 $script:logPanel = $logPanel
 $script:logTextBox = $logTextBox
+
+$script:effortLevels = @('minimal', 'low', 'medium', 'high', 'max')
+$script:effortButtons = @()
+$effortPanel = $window.FindName('EffortButtons')
+foreach ($level in $script:effortLevels) {
+    $button = New-Object System.Windows.Controls.Button
+    $button.Name = "Effort$level"
+    $button.Style = $window.FindResource('EffortButton')
+    $button.Content = $level
+    $button.Tag = $level
+    $button.Add_Click({ Set-ReasoningEffort $this.Tag })
+    $effortPanel.Children.Add($button) | Out-Null
+    $script:effortButtons += $button
+}
 
 $statusEffect = New-Object System.Windows.Media.Effects.DropShadowEffect
 $statusEffect.BlurRadius = 12
@@ -656,9 +662,6 @@ Update-EffortButtons
 $startButton.Add_Click({ Start-Proxy })
 $stopButton.Add_Click({ Stop-Proxy })
 $logToggleButton.Add_Click({ Toggle-LogPanel })
-$effortLow.Add_Click({ Set-ReasoningEffort 'low' })
-$effortMedium.Add_Click({ Set-ReasoningEffort 'medium' })
-$effortHigh.Add_Click({ Set-ReasoningEffort 'high' })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
