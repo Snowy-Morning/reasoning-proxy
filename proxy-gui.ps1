@@ -324,6 +324,55 @@ $xaml = @'
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="LogScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                    Grid.Row="0"
+                                                    Grid.Column="0"
+                                                    CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                    CanHorizontallyScroll="False"
+                                                    CanVerticallyScroll="False"
+                                                    Content="{TemplateBinding Content}"
+                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    Margin="{TemplateBinding Padding}"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Orientation="Vertical"
+                                       Minimum="0"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
+                                       Cursor="Arrow"
+                                       Style="{StaticResource LogScrollBar}"/>
+                            <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                       Grid.Row="1"
+                                       Grid.Column="0"
+                                       Orientation="Horizontal"
+                                       Minimum="0"
+                                       Maximum="{TemplateBinding ScrollableWidth}"
+                                       ViewportSize="{TemplateBinding ViewportWidth}"
+                                       Value="{TemplateBinding HorizontalOffset}"
+                                       Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                       Cursor="Arrow"
+                                       Style="{StaticResource LogScrollBar}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="LogTextBoxStyle" TargetType="TextBox">
             <Setter Property="Background" Value="#151924"/>
             <Setter Property="Foreground" Value="#C7D0E0"/>
@@ -335,11 +384,7 @@ $xaml = @'
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="10">
-                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}">
-                                <ScrollViewer.Resources>
-                                    <Style TargetType="ScrollBar" BasedOn="{StaticResource LogScrollBar}"/>
-                                </ScrollViewer.Resources>
-                            </ScrollViewer>
+                            <ScrollViewer x:Name="PART_ContentHost" Style="{StaticResource LogScrollViewerStyle}" Focusable="False" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
