@@ -40,10 +40,8 @@
 ## 目录说明
 
 ```text
-start.bat      启动代理（根目录入口）
-stop.bat       停止代理（根目录入口）
 gui.vbs        打开图形界面（根目录入口）
-scripts/       实现代码（proxy.js、proxy-gui.ps1、start.bat、stop.bat 等）
+scripts/       实现代码与命令行入口（start.bat、stop.bat、proxy.js 等）
 config/        配置文件（config.bat）
 assets/        图标资源（logo.png / logo.ico）
 logs/          运行日志（proxy.log / proxy.err.log）
@@ -66,8 +64,6 @@ node --version
 把以下文件复制到新电脑的同一个文件夹中：
 
 ```text
-start.bat
-stop.bat
 gui.vbs
 scripts\proxy.js
 scripts\proxy-gui.ps1
@@ -102,7 +98,7 @@ assets\logo.ico
 - 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
 - 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可选择退出界面（不停止代理）。
 
-也可以双击 `start.bat` 直接后台启动，不打开界面。代理会在后台运行，启动窗口几秒后会自动关闭。需要停止时双击 `stop.bat` 即可。
+也可以双击 `scripts\start.bat` 直接后台启动，不打开界面。代理会在后台运行，启动窗口几秒后会自动关闭。需要停止时双击 `scripts\stop.bat` 即可。
 
 如果需要在前台调试，也可以在项目目录执行：
 
@@ -199,7 +195,7 @@ node scripts\proxy.js
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 | `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config\config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `logs\proxy.log` 和 `logs\proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
+`scripts\start.bat` 启动时会自动加载 `config\config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `logs\proxy.log` 和 `logs\proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
 
 ## 简单验证
 
@@ -272,7 +268,7 @@ Kimi K3 官方文档只接受 `low` / `high` / `max` 三档。图形界面里的
 
 ## 停止服务
 
-后台运行时没有可直接关闭的窗口，双击 `stop.bat` 会按配置的端口找到代理进程并结束，也可以在图形界面中点击“停止代理”。
+后台运行时没有可直接关闭的窗口，双击 `scripts\stop.bat` 会按配置的端口找到代理进程并结束，也可以在图形界面中点击“停止代理”。
 
 也可以手动执行：
 
@@ -281,4 +277,4 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
   ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
-修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理：先按上面的方法停止旧实例，再双击 `start.bat`。推理等级不需要重启，在图形界面切换或编辑 `config\config.bat` 后下一次请求就会生效。
+修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理：先按上面的方法停止旧实例，再双击 `scripts\start.bat`。推理等级不需要重启，在图形界面切换或编辑 `config\config.bat` 后下一次请求就会生效。
