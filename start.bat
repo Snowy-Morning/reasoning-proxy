@@ -10,7 +10,7 @@ if %errorlevel%==0 (
     exit /b 0
 )
 echo [proxy] Starting reasoning proxy on http://127.0.0.1:%PROXY_PORT% ...
-echo [proxy] Target: %TARGET_HOST%:%TARGET_PORT%, reasoning_effort=%REASONING_EFFORT%
+echo [proxy] Target: %TARGET_HOST%:%TARGET_PORT%, reasoning_effort=%REASONING_EFFORT%, kimi_temperature=%KIMI_TEMPERATURE%
 powershell -NoProfile -Command "node '%~dp0proxy.js' 2>&1 | Tee-Object -FilePath '%~dp0proxy.log' -Append"
 echo.
 echo [proxy] Exited unexpectedly. Check the error above.

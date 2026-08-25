@@ -5,23 +5,43 @@ const PROXY_PORT = Number(process.env.PROXY_PORT || 3120);
 const TARGET_HOST = process.env.TARGET_HOST || "10.0.8.19";
 const TARGET_PORT = process.env.TARGET_PORT || "80";
 const REASONING_EFFORT = process.env.REASONING_EFFORT || "high";
+const KIMI_TEMPERATURE = Number(process.env.KIMI_TEMPERATURE || 1);
 
-function injectReasoningEffort(bodyBuffer) {
+function rewriteRequestBody(bodyBuffer) {
+  let data;
   try {
-    const data = JSON.parse(bodyBuffer.toString("utf8"));
-    if (data.reasoning_effort === undefined) {
-      data.reasoning_effort = REASONING_EFFORT;
-      console.log(
-        `[proxy] injected reasoning_effort=${REASONING_EFFORT} for model=${data.model ?? "?"}`
-      );
-      return Buffer.from(JSON.stringify(data), "utf8");
-    }
-    console.log(`[proxy] request already sets reasoning_effort=${data.reasoning_effort}`);
-    return null;
+    data = JSON.parse(bodyBuffer.toString("utf8"));
   } catch {
     console.warn("[proxy] non-JSON body, passing through unchanged");
     return null;
   }
+
+  let changed = false;
+
+  if (data.reasoning_effort === undefined) {
+    data.reasoning_effort = REASONING_EFFORT;
+    console.log(
+      `[proxy] injected reasoning_effort=${REASONING_EFFORT} for model=${data.model ?? "?"}`
+    );
+    changed = true;
+  } else {
+    console.log(`[proxy] request already sets reasoning_effort=${data.reasoning_effort}`);
+  }
+
+  const model = String(data.model ?? "");
+  if (
+    /kimi/i.test(model) &&
+    data.temperature !== undefined &&
+    data.temperature !== KIMI_TEMPERATURE
+  ) {
+    console.log(
+      `[proxy] kimi model uses fixed temperature=${KIMI_TEMPERATURE}, rewriting temperature=${data.temperature} -> ${KIMI_TEMPERATURE}`
+    );
+    data.temperature = KIMI_TEMPERATURE;
+    changed = true;
+  }
+
+  return changed ? Buffer.from(JSON.stringify(data), "utf8") : null;
 }
 
 function summarizeRequest(bodyBuffer) {
@@ -64,7 +84,7 @@ const server = http.createServer((req, res) => {
       contentType.includes("application/json") &&
       bodyBuffer.length > 0
     ) {
-      const rewritten = injectReasoningEffort(bodyBuffer);
+      const rewritten = rewriteRequestBody(bodyBuffer);
       if (rewritten) bodyBuffer = rewritten;
     }
 
@@ -119,4 +139,5 @@ server.listen(PROXY_PORT, "127.0.0.1", () => {
   console.log(`[proxy] listening on http://127.0.0.1:${PROXY_PORT}`);
   console.log(`[proxy] forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
   console.log(`[proxy] default reasoning_effort=${REASONING_EFFORT}`);
+  console.log(`[proxy] default kimi temperature=${KIMI_TEMPERATURE}`);
 });

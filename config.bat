@@ -11,3 +11,6 @@ set TARGET_PORT=80
 
 rem 默认推理强度（low / medium / high）
 set REASONING_EFFORT=high
+
+rem Kimi 推理模型只允许 temperature=1，可在此调整
+set KIMI_TEMPERATURE=1

@@ -1,6 +1,6 @@
 # Reasoning Proxy
 
-这是一个使用 Node.js 编写的本地 HTTP 反向代理。它把本机收到的 API 请求转发到指定的上游服务，并为没有显式设置 `reasoning_effort` 的 JSON POST 请求自动补充默认值。
+这是一个使用 Node.js 编写的本地 HTTP 反向代理。它把本机收到的 API 请求转发到指定的上游服务，并为没有显式设置 `reasoning_effort` 的 JSON POST 请求自动补充默认值，同时把 Kimi 模型的 `temperature` 修正为 `KIMI_TEMPERATURE` 配置值。
 
 它适合用于需要统一设置大模型推理强度的内部服务或 OpenAI 兼容 API 调试场景。
 
@@ -15,7 +15,7 @@
     v
 127.0.0.1:3120
     |
-    | JSON POST 且缺少 reasoning_effort 时，注入 reasoning_effort=high
+    | JSON POST 时注入 reasoning_effort；模型名含 kimi 时修正 temperature
     v
 10.0.8.19:80
     |
@@ -29,8 +29,9 @@
 2. 读取请求体，并保留原来的请求方法、URL 和请求头。
 3. 当请求方法是 `POST`、内容类型包含 `application/json` 且请求体是合法 JSON 时，检查 `reasoning_effort` 字段。
 4. 如果字段不存在，就加入默认值 `high`；如果调用方已经设置，则不覆盖调用方的值。
-5. 将请求转发到目标主机和端口，并把上游响应原样返回给客户端。
-6. 尝试从响应前 2 MB 中提取提示词缓存统计，例如 `cached_tokens`，用于写入日志。
+5. 当模型名包含 `kimi` 时，把非 `KIMI_TEMPERATURE` 的 `temperature` 改写为配置值（默认 `1`）。
+6. 将请求转发到目标主机和端口，并把上游响应原样返回给客户端。
+7. 尝试从响应前 2 MB 中提取提示词缓存统计，例如 `cached_tokens`，用于写入日志。
 
 请求体不是合法 JSON 时，代理会直接透传，不会因为改写失败而阻断请求。
 
@@ -38,7 +39,7 @@
 
 ```text
 proxy.js       代理主程序
-config.bat     配置文件（目标 IP、端口、推理等级）
+config.bat     配置文件（目标 IP、端口、推理等级、Kimi 温度）
 start.bat      Windows 启动脚本
 proxy.log      运行日志，启动后自动追加
 proxy.err.log  预留的错误日志文件
@@ -92,6 +93,7 @@ node .\proxy.js
 [proxy] listening on http://127.0.0.1:3120
 [proxy] forwarding to http://10.0.8.19:80
 [proxy] default reasoning_effort=high
+[proxy] default kimi temperature=1
 ```
 
 ### 5. 修改客户端地址
@@ -128,6 +130,9 @@ set TARGET_PORT=80
 
 rem 默认推理强度（low / medium / high）
 set REASONING_EFFORT=high
+
+rem Kimi 推理模型只允许 temperature=1，可在此调整
+set KIMI_TEMPERATURE=1
 ```
 
 也可以不使用配置文件，通过环境变量临时覆盖。
@@ -139,6 +144,7 @@ $env:PROXY_PORT = "3120"
 $env:TARGET_HOST = "10.0.8.19"
 $env:TARGET_PORT = "80"
 $env:REASONING_EFFORT = "high"
+$env:KIMI_TEMPERATURE = "1"
 node .\proxy.js
 ```
 
@@ -149,6 +155,7 @@ set PROXY_PORT=3120
 set TARGET_HOST=10.0.8.19
 set TARGET_PORT=80
 set REASONING_EFFORT=high
+set KIMI_TEMPERATURE=1
 node proxy.js
 ```
 
@@ -160,6 +167,7 @@ node proxy.js
 | `TARGET_HOST` | `10.0.8.19` | 上游服务器地址 |
 | `TARGET_PORT` | `80` | 上游服务器端口 |
 | `REASONING_EFFORT` | `high` | 缺少字段时注入的默认推理强度 |
+| `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 
 `start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。如果配置文件不存在，程序会使用上表中的内置默认值。
 
@@ -215,6 +223,10 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen
 - 请求体中没有已经存在的 `reasoning_effort` 字段。
 
 如果调用方已经设置该字段，代理会保留调用方的值。
+
+### 使用 Kimi 模型时提示 `invalid temperature`
+
+Kimi 的推理模型只接受 `temperature=1`，而 VS Code Copilot 等客户端可能会发送其他值（例如 `0.7`）。代理现在会在请求中包含 `kimi` 模型名时，把非配置值的 `temperature` 自动改写为 `KIMI_TEMPERATURE`（默认 `1`）再转发；如果请求没有携带该字段，则保持原样。
 
 ## 安全注意事项
 
