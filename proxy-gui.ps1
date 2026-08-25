@@ -5,6 +5,55 @@ Add-Type -AssemblyName System.Xaml
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ProxyGuiSingleInstance {
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    public static IntPtr FindProxyWindow() {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+            var title = new StringBuilder(256);
+            GetWindowText(hWnd, title, title.Capacity);
+            if (title.ToString() == "Reasoning Proxy") {
+                result = hWnd;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
+}
+'@
+
+$existingWindow = [ProxyGuiSingleInstance]::FindProxyWindow()
+if ($existingWindow -ne [IntPtr]::Zero) {
+    [ProxyGuiSingleInstance]::ShowWindow($existingWindow, 9) | Out-Null
+    [ProxyGuiSingleInstance]::SetForegroundWindow($existingWindow) | Out-Null
+    exit 0
+}
+
+$script:mutexCreatedNew = $false
+$script:appMutex = New-Object System.Threading.Mutex($false, 'Local\ReasoningProxyGui', [ref]$script:mutexCreatedNew)
+if (-not $script:mutexCreatedNew) {
+    $existingWindow = [ProxyGuiSingleInstance]::FindProxyWindow()
+    if ($existingWindow -ne [IntPtr]::Zero) {
+        [ProxyGuiSingleInstance]::ShowWindow($existingWindow, 9) | Out-Null
+        [ProxyGuiSingleInstance]::SetForegroundWindow($existingWindow) | Out-Null
+    }
+    exit 0
+}
+
 function Read-Config {
     $configPath = Join-Path $PSScriptRoot 'config.bat'
     if (-not (Test-Path $configPath)) {
@@ -714,3 +763,8 @@ Update-Status
 
 $app = New-Object System.Windows.Application
 $app.Run($window) | Out-Null
+
+if ($script:appMutex) {
+    try { $script:appMutex.ReleaseMutex() } catch {}
+    $script:appMutex.Dispose()
+}
