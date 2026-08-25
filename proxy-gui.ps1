@@ -116,11 +116,19 @@ function Get-LogText {
     }
 }
 
+function Scroll-LogToEnd {
+    $script:logTextBox.Dispatcher.InvokeAsync(
+        [System.Action] { $script:logTextBox.ScrollToEnd() },
+        [System.Windows.Threading.DispatcherPriority]::ApplicationIdle
+    ) | Out-Null
+}
+
 function Update-LogPanel {
     $text = Get-LogText
     if ($script:logTextBox.Text -ne $text) {
         $script:logTextBox.Text = $text
-        $script:logTextBox.ScrollToEnd()
+        $script:logTextBox.UpdateLayout()
+        Scroll-LogToEnd
     }
 }
 
@@ -131,6 +139,8 @@ function Toggle-LogPanel {
         $script:logPanel.Visibility = [System.Windows.Visibility]::Visible
         $script:logToggleButton.Content = '返回状态'
         Update-LogPanel
+        $script:logTextBox.UpdateLayout()
+        Scroll-LogToEnd
     } else {
         $script:logPanel.Visibility = [System.Windows.Visibility]::Collapsed
         $script:mainPanel.Visibility = [System.Windows.Visibility]::Visible
@@ -152,6 +162,7 @@ $xaml = @'
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib"
     Title="Reasoning Proxy"
     Width="520"
     Height="464"
@@ -230,6 +241,106 @@ $xaml = @'
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ScrollThumb" TargetType="Thumb">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="thumbBg" Background="#3B455E" CornerRadius="4" Margin="2"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="thumbBg" Property="Background" Value="#596684"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="thumbBg" Property="Background" Value="#76839F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ScrollPageButton" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LogScrollBar" TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="MinWidth" Value="8"/>
+            <Setter Property="MaxWidth" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Style="{StaticResource ScrollPageButton}"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollThumb}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Style="{StaticResource ScrollPageButton}"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="MinWidth" Value="0"/>
+                    <Setter Property="MaxWidth" Value="{x:Static sys:Double.PositiveInfinity}"/>
+                    <Setter Property="MinHeight" Value="8"/>
+                    <Setter Property="MaxHeight" Value="8"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ScrollBar">
+                                <Grid Background="Transparent">
+                                    <Track x:Name="PART_Track" Orientation="Horizontal" IsDirectionReversed="False">
+                                        <Track.DecreaseRepeatButton>
+                                            <RepeatButton Command="{x:Static ScrollBar.PageLeftCommand}" Style="{StaticResource ScrollPageButton}"/>
+                                        </Track.DecreaseRepeatButton>
+                                        <Track.Thumb>
+                                            <Thumb Style="{StaticResource ScrollThumb}"/>
+                                        </Track.Thumb>
+                                        <Track.IncreaseRepeatButton>
+                                            <RepeatButton Command="{x:Static ScrollBar.PageRightCommand}" Style="{StaticResource ScrollPageButton}"/>
+                                        </Track.IncreaseRepeatButton>
+                                    </Track>
+                                </Grid>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="LogTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#151924"/>
+            <Setter Property="Foreground" Value="#C7D0E0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="10">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}">
+                                <ScrollViewer.Resources>
+                                    <Style TargetType="ScrollBar" BasedOn="{StaticResource LogScrollBar}"/>
+                                </ScrollViewer.Resources>
+                            </ScrollViewer>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -344,7 +455,7 @@ $xaml = @'
 
                 <Grid x:Name="LogPanel" Visibility="Collapsed">
                     <Border Background="#1C2130" CornerRadius="12" Padding="10">
-                        <TextBox x:Name="LogTextBox" IsReadOnly="True" FontFamily="Consolas" FontSize="11" Background="#151924" Foreground="#C7D0E0" BorderThickness="0" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12"/>
+                        <TextBox x:Name="LogTextBox" Style="{StaticResource LogTextBoxStyle}" IsReadOnly="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
                     </Border>
                 </Grid>
             </Grid>
