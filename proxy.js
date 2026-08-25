@@ -6,6 +6,7 @@ const TARGET_HOST = process.env.TARGET_HOST || "10.0.8.19";
 const TARGET_PORT = process.env.TARGET_PORT || "80";
 const REASONING_EFFORT = process.env.REASONING_EFFORT || "high";
 const KIMI_TEMPERATURE = Number(process.env.KIMI_TEMPERATURE || 1);
+const KIMI_TOP_P = Number(process.env.KIMI_TOP_P || 0.95);
 
 function rewriteRequestBody(bodyBuffer) {
   let data;
@@ -29,15 +30,19 @@ function rewriteRequestBody(bodyBuffer) {
   }
 
   const model = String(data.model ?? "");
-  if (
-    /kimi/i.test(model) &&
-    data.temperature !== undefined &&
-    data.temperature !== KIMI_TEMPERATURE
-  ) {
+  const isKimi = /kimi/i.test(model);
+  if (isKimi && data.temperature !== undefined && data.temperature !== KIMI_TEMPERATURE) {
     console.log(
       `[proxy] kimi model uses fixed temperature=${KIMI_TEMPERATURE}, rewriting temperature=${data.temperature} -> ${KIMI_TEMPERATURE}`
     );
     data.temperature = KIMI_TEMPERATURE;
+    changed = true;
+  }
+  if (isKimi && data.top_p !== undefined && data.top_p !== KIMI_TOP_P) {
+    console.log(
+      `[proxy] kimi model uses fixed top_p=${KIMI_TOP_P}, rewriting top_p=${data.top_p} -> ${KIMI_TOP_P}`
+    );
+    data.top_p = KIMI_TOP_P;
     changed = true;
   }
 
@@ -140,4 +145,5 @@ server.listen(PROXY_PORT, "127.0.0.1", () => {
   console.log(`[proxy] forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
   console.log(`[proxy] default reasoning_effort=${REASONING_EFFORT}`);
   console.log(`[proxy] default kimi temperature=${KIMI_TEMPERATURE}`);
+  console.log(`[proxy] default kimi top_p=${KIMI_TOP_P}`);
 });

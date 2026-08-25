@@ -14,3 +14,6 @@ set REASONING_EFFORT=high
 
 rem Kimi 推理模型只允许 temperature=1，可在此调整
 set KIMI_TEMPERATURE=1
+
+rem Kimi 推理模型只允许 top_p=0.95，可在此调整
+set KIMI_TOP_P=0.95

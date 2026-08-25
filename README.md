@@ -1,6 +1,6 @@
 # Reasoning Proxy
 
-这是一个使用 Node.js 编写的本地 HTTP 反向代理。它把本机收到的 API 请求转发到指定的上游服务，并为没有显式设置 `reasoning_effort` 的 JSON POST 请求自动补充默认值，同时把 Kimi 模型的 `temperature` 修正为 `KIMI_TEMPERATURE` 配置值。
+这是一个使用 Node.js 编写的本地 HTTP 反向代理。它把本机收到的 API 请求转发到指定的上游服务，并为没有显式设置 `reasoning_effort` 的 JSON POST 请求自动补充默认值，同时把 Kimi 模型的 `temperature` 和 `top_p` 修正为 `KIMI_TEMPERATURE`、`KIMI_TOP_P` 配置值。
 
 它适合用于需要统一设置大模型推理强度的内部服务或 OpenAI 兼容 API 调试场景。
 
@@ -15,7 +15,7 @@
     v
 127.0.0.1:3120
     |
-    | JSON POST 时注入 reasoning_effort；模型名含 kimi 时修正 temperature
+    | JSON POST 时注入 reasoning_effort；模型名含 kimi 时修正 temperature/top_p
     v
 10.0.8.19:80
     |
@@ -29,7 +29,7 @@
 2. 读取请求体，并保留原来的请求方法、URL 和请求头。
 3. 当请求方法是 `POST`、内容类型包含 `application/json` 且请求体是合法 JSON 时，检查 `reasoning_effort` 字段。
 4. 如果字段不存在，就加入默认值 `high`；如果调用方已经设置，则不覆盖调用方的值。
-5. 当模型名包含 `kimi` 时，把非 `KIMI_TEMPERATURE` 的 `temperature` 改写为配置值（默认 `1`）。
+5. 当模型名包含 `kimi` 时，把非配置值的 `temperature`、`top_p` 改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）。
 6. 将请求转发到目标主机和端口，并把上游响应原样返回给客户端。
 7. 尝试从响应前 2 MB 中提取提示词缓存统计，例如 `cached_tokens`，用于写入日志。
 
@@ -39,10 +39,12 @@
 
 ```text
 proxy.js       代理主程序
-config.bat     配置文件（目标 IP、端口、推理等级、Kimi 温度）
+config.bat     配置文件（目标 IP、端口、推理等级、Kimi 参数）
 start.bat      Windows 启动脚本
+start-background.ps1  后台启动辅助脚本
+stop.bat       Windows 停止脚本
 proxy.log      运行日志，启动后自动追加
-proxy.err.log  预留的错误日志文件
+proxy.err.log  错误日志，后台运行时自动追加
 ```
 
 ## 迁移到新电脑
@@ -64,6 +66,8 @@ node --version
 ```text
 proxy.js
 start.bat
+start-background.ps1
+stop.bat
 config.bat
 ```
 
@@ -81,19 +85,22 @@ config.bat
 
 ### 4. 启动代理
 
-双击 `start.bat`，或者在项目目录执行：
+双击 `start.bat`。代理会在后台运行，启动窗口几秒后会自动关闭，关闭窗口不影响代理继续运行。需要停止时双击 `stop.bat` 即可。
+
+如果需要在前台调试，也可以在项目目录执行：
 
 ```powershell
 node .\proxy.js
 ```
 
-看到类似下面的日志，就表示本地代理已经启动：
+后台启动后，`proxy.log` 中会出现类似下面的内容，表示本地代理已经启动：
 
 ```text
 [proxy] listening on http://127.0.0.1:3120
 [proxy] forwarding to http://10.0.8.19:80
 [proxy] default reasoning_effort=high
 [proxy] default kimi temperature=1
+[proxy] default kimi top_p=0.95
 ```
 
 ### 5. 修改客户端地址
@@ -133,6 +140,9 @@ set REASONING_EFFORT=high
 
 rem Kimi 推理模型只允许 temperature=1，可在此调整
 set KIMI_TEMPERATURE=1
+
+rem Kimi 推理模型只允许 top_p=0.95，可在此调整
+set KIMI_TOP_P=0.95
 ```
 
 也可以不使用配置文件，通过环境变量临时覆盖。
@@ -145,6 +155,7 @@ $env:TARGET_HOST = "10.0.8.19"
 $env:TARGET_PORT = "80"
 $env:REASONING_EFFORT = "high"
 $env:KIMI_TEMPERATURE = "1"
+$env:KIMI_TOP_P = "0.95"
 node .\proxy.js
 ```
 
@@ -156,6 +167,7 @@ set TARGET_HOST=10.0.8.19
 set TARGET_PORT=80
 set REASONING_EFFORT=high
 set KIMI_TEMPERATURE=1
+set KIMI_TOP_P=0.95
 node proxy.js
 ```
 
@@ -168,8 +180,9 @@ node proxy.js
 | `TARGET_PORT` | `80` | 上游服务器端口 |
 | `REASONING_EFFORT` | `high` | 缺少字段时注入的默认推理强度 |
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
+| `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。如果配置文件不存在，程序会使用上表中的内置默认值。
+`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。
 
 ## 简单验证
 
@@ -224,9 +237,9 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen
 
 如果调用方已经设置该字段，代理会保留调用方的值。
 
-### 使用 Kimi 模型时提示 `invalid temperature`
+### 使用 Kimi 模型时提示 `invalid temperature` 或 `invalid top_p`
 
-Kimi 的推理模型只接受 `temperature=1`，而 VS Code Copilot 等客户端可能会发送其他值（例如 `0.7`）。代理现在会在请求中包含 `kimi` 模型名时，把非配置值的 `temperature` 自动改写为 `KIMI_TEMPERATURE`（默认 `1`）再转发；如果请求没有携带该字段，则保持原样。
+Kimi 的推理模型只接受 `temperature=1` 和 `top_p=0.95`，而 VS Code Copilot 等客户端可能会发送其他值。代理现在会在请求中包含 `kimi` 模型名时，把非配置值的 `temperature`、`top_p` 自动改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）再转发；如果请求没有携带对应字段，则保持原样。
 
 ## 安全注意事项
 
@@ -238,4 +251,13 @@ Kimi 的推理模型只接受 `temperature=1`，而 VS Code Copilot 等客户端
 
 ## 停止服务
 
-在运行代理的窗口按 `Ctrl+C` 即可停止。
+后台运行时没有可直接关闭的窗口，双击 `stop.bat` 会按配置的端口找到代理进程并结束。
+
+也可以手动执行：
+
+```powershell
+Get-NetTCPConnection -LocalPort 3120 -State Listen |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+修改配置后需要重启：先按上面的方法停止旧实例，再双击 `start.bat`。
