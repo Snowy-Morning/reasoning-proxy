@@ -205,7 +205,7 @@ $xaml = @'
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     Title="Reasoning Proxy"
     Width="520"
-    Height="520"
+    Height="500"
     WindowStyle="None"
     AllowsTransparency="True"
     Background="Transparent"
