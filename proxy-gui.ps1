@@ -20,6 +20,29 @@ function Read-Config {
     return $config
 }
 
+function Set-ConfigValue([string]$Name, [string]$Value) {
+    $configPath = Join-Path $PSScriptRoot 'config.bat'
+    $lines = if (Test-Path $configPath) {
+        @([System.IO.File]::ReadAllLines($configPath))
+    } else {
+        @()
+    }
+    $pattern = "^set\s+$([regex]::Escape($Name))\s*="
+    $updated = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match $pattern) {
+            $lines[$i] = "set $Name=$Value"
+            $updated = $true
+            break
+        }
+    }
+    if (-not $updated) {
+        $lines += "set $Name=$Value"
+    }
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($configPath, $lines, $encoding)
+}
+
 function Get-ProxyProcessId {
     $connection = Get-NetTCPConnection -LocalPort $script:Port -State Listen -ErrorAction SilentlyContinue |
         Select-Object -First 1
@@ -76,7 +99,6 @@ function Start-Proxy {
     $script:statusEffect.Opacity = 0.9
     $script:glowStoryboard.Begin()
     $script:startButton.IsEnabled = $false
-    $script:statusDot.Foreground = $yellow
     $script:statusText.Text = '正在启动...'
     $script:statusText.Foreground = $yellow
     $script:pidText.Text = '请稍候'
@@ -91,6 +113,31 @@ function Stop-Proxy {
         Start-Sleep -Milliseconds 300
     }
     Update-Status
+}
+
+function Update-EffortButtons {
+    $selectedBrush = New-Brush '#FFFFFF'
+    $selectedBg = New-Brush '#4F5B78'
+    $mutedBrush = New-Brush '#949EB4'
+    $mutedBg = New-Brush 'Transparent'
+    foreach ($button in $script:effortButtons) {
+        $isSelected = ($button.Tag -eq $script:reasoningEffort)
+        $button.Foreground = if ($isSelected) { $selectedBrush } else { $mutedBrush }
+        $button.Background = if ($isSelected) { $selectedBg } else { $mutedBg }
+    }
+}
+
+function Set-ReasoningEffort([string]$Value) {
+    if ($Value -eq $script:reasoningEffort) {
+        return
+    }
+    $script:reasoningEffort = $Value
+    Set-ConfigValue 'REASONING_EFFORT' $Value
+    Update-EffortButtons
+    if (Get-ProxyProcessId) {
+        Stop-Proxy
+        Start-Proxy
+    }
 }
 
 function Get-LogText {
@@ -152,7 +199,7 @@ $config = Read-Config
 $script:Port = if ($config['PROXY_PORT']) { [int]$config['PROXY_PORT'] } else { 3120 }
 $targetHost = if ($config['TARGET_HOST']) { $config['TARGET_HOST'] } else { '10.0.8.19' }
 $targetPort = if ($config['TARGET_PORT']) { $config['TARGET_PORT'] } else { '80' }
-$reasoningEffort = if ($config['REASONING_EFFORT']) { $config['REASONING_EFFORT'] } else { 'high' }
+$script:reasoningEffort = if ($config['REASONING_EFFORT']) { $config['REASONING_EFFORT'] } else { 'high' }
 $kimiTemperature = if ($config['KIMI_TEMPERATURE']) { $config['KIMI_TEMPERATURE'] } else { '1' }
 $kimiTopP = if ($config['KIMI_TOP_P']) { $config['KIMI_TOP_P'] } else { '0.95' }
 $script:allowExit = $false
@@ -390,6 +437,30 @@ $xaml = @'
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="EffortButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#949EB4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="12,4"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#2A3040"/>
+                                <Setter Property="Foreground" Value="#EBEEF8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="HeaderButton" TargetType="Button">
             <Setter Property="Foreground" Value="#949EB4"/>
             <Setter Property="FontSize" Value="12"/>
@@ -478,7 +549,11 @@ $xaml = @'
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="目标地址" Foreground="#949EB4" Margin="0,6,0,6"/>
                             <TextBlock x:Name="TargetValue" Grid.Row="1" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" Margin="0,6,0,6"/>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="推理等级" Foreground="#949EB4" Margin="0,6,0,6"/>
-                            <TextBlock x:Name="EffortValue" Grid.Row="2" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" Margin="0,6,0,6"/>
+                            <StackPanel x:Name="EffortButtons" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,6">
+                                <Button x:Name="EffortLow" Style="{StaticResource EffortButton}" Content="low" Tag="low"/>
+                                <Button x:Name="EffortMedium" Style="{StaticResource EffortButton}" Content="medium" Tag="medium"/>
+                                <Button x:Name="EffortHigh" Style="{StaticResource EffortButton}" Content="high" Tag="high"/>
+                            </StackPanel>
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Kimi 参数" Foreground="#949EB4" Margin="0,6,0,6"/>
                             <TextBlock x:Name="KimiValue" Grid.Row="3" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" Margin="0,6,0,6"/>
                         </Grid>
@@ -520,6 +595,9 @@ $pidText = $window.FindName('PidText')
 $startButton = $window.FindName('StartButton')
 $stopButton = $window.FindName('StopButton')
 $logToggleButton = $window.FindName('LogToggleButton')
+$effortLow = $window.FindName('EffortLow')
+$effortMedium = $window.FindName('EffortMedium')
+$effortHigh = $window.FindName('EffortHigh')
 $mainPanel = $window.FindName('MainPanel')
 $logPanel = $window.FindName('LogPanel')
 $logTextBox = $window.FindName('LogTextBox')
@@ -530,6 +608,7 @@ $script:pidText = $pidText
 $script:startButton = $startButton
 $script:stopButton = $stopButton
 $script:logToggleButton = $logToggleButton
+$script:effortButtons = @($effortLow, $effortMedium, $effortHigh)
 $script:mainPanel = $mainPanel
 $script:logPanel = $logPanel
 $script:logTextBox = $logTextBox
@@ -575,12 +654,15 @@ $window.Icon = $logoBitmap
 
 $window.FindName('LocalValue').Text = "http://127.0.0.1:$script:Port"
 $window.FindName('TargetValue').Text = "http://${targetHost}:${targetPort}"
-$window.FindName('EffortValue').Text = $reasoningEffort
 $window.FindName('KimiValue').Text = "temperature=$kimiTemperature  top_p=$kimiTopP"
+Update-EffortButtons
 
 $startButton.Add_Click({ Start-Proxy })
 $stopButton.Add_Click({ Stop-Proxy })
 $logToggleButton.Add_Click({ Toggle-LogPanel })
+$effortLow.Add_Click({ Set-ReasoningEffort 'low' })
+$effortMedium.Add_Click({ Set-ReasoningEffort 'medium' })
+$effortHigh.Add_Click({ Set-ReasoningEffort 'high' })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
