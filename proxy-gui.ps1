@@ -205,7 +205,7 @@ $xaml = @'
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     Title="Reasoning Proxy"
     Width="520"
-    Height="464"
+    Height="520"
     WindowStyle="None"
     AllowsTransparency="True"
     Background="Transparent"
@@ -435,8 +435,8 @@ $xaml = @'
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontFamily" Value="Consolas"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="0,4"/>
-            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Padding" Value="0,4,18,4"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Template">
                 <Setter.Value>
