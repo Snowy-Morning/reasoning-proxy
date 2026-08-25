@@ -116,14 +116,11 @@ function Stop-Proxy {
 }
 
 function Update-EffortButtons {
-    $selectedBrush = New-Brush '#FFFFFF'
-    $selectedBg = New-Brush '#4F5B78'
+    $selectedBrush = New-Brush '#4ADE80'
     $mutedBrush = New-Brush '#949EB4'
-    $mutedBg = New-Brush 'Transparent'
     foreach ($button in $script:effortButtons) {
         $isSelected = ($button.Tag -eq $script:reasoningEffort)
         $button.Foreground = if ($isSelected) { $selectedBrush } else { $mutedBrush }
-        $button.Background = if ($isSelected) { $selectedBg } else { $mutedBg }
     }
 }
 
@@ -433,26 +430,19 @@ $xaml = @'
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="EffortButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
+        <Style x:Key="TextButton" TargetType="Button">
             <Setter Property="Foreground" Value="#949EB4"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontFamily" Value="Consolas"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="12,4"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#2A3040"/>
-                                <Setter Property="Foreground" Value="#EBEEF8"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -607,7 +597,7 @@ $effortPanel = $window.FindName('EffortButtons')
 foreach ($level in $script:effortLevels) {
     $button = New-Object System.Windows.Controls.Button
     $button.Name = "Effort$level"
-    $button.Style = $window.FindResource('EffortButton')
+    $button.Style = $window.FindResource('TextButton')
     $button.Content = $level
     $button.Tag = $level
     $button.Add_Click({ Set-ReasoningEffort $this.Tag })
