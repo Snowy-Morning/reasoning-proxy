@@ -11,7 +11,7 @@ const KIMI_TOP_P = Number(process.env.KIMI_TOP_P || 0.95);
 
 function readReasoningEffort() {
   try {
-    const configPath = path.join(__dirname, "config.bat");
+    const configPath = path.join(__dirname, "..", "config", "config.bat");
     const content = fs.readFileSync(configPath, "utf8");
     const match = content.match(/^\s*set\s+REASONING_EFFORT\s*=\s*(.*?)\s*$/m);
     if (match && match[1].trim()) {

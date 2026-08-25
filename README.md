@@ -4,7 +4,7 @@
 
 它适合用于需要统一设置大模型推理强度的内部服务或 OpenAI 兼容 API 调试场景。
 
-项目还附带一个 WPF 图形界面（`gui.vbs` / `proxy-gui.ps1`），可以查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
+项目还附带一个 WPF 图形界面（`gui.vbs` / `scripts\proxy-gui.ps1`），可以查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
 
 ## 运作原理
 
@@ -25,12 +25,12 @@
 上游服务响应
 ```
 
-程序启动后，`proxy.js` 会执行以下操作：
+程序启动后，`scripts\proxy.js` 会执行以下操作：
 
 1. 在 `127.0.0.1:3120` 上监听请求。
 2. 读取请求体，并保留原来的请求方法、URL 和请求头。
 3. 当请求方法是 `POST`、内容类型包含 `application/json` 且请求体是合法 JSON 时，检查 `reasoning_effort` 字段。
-4. 如果字段不存在，就从 `config.bat` 读取 `REASONING_EFFORT` 并注入（默认 `high`）；如果调用方已经设置，则不覆盖调用方的值。
+4. 如果字段不存在，就从 `config\config.bat` 读取 `REASONING_EFFORT` 并注入（默认 `high`）；如果调用方已经设置，则不覆盖调用方的值。
 5. 当模型名包含 `kimi` 时，把非配置值的 `temperature`、`top_p` 改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）。
 6. 将请求转发到目标主机和端口，并把上游响应原样返回给客户端。
 7. 尝试从响应前 2 MB 中提取提示词缓存统计，例如 `cached_tokens`，用于写入日志。
@@ -40,13 +40,11 @@
 ## 目录说明
 
 ```text
-proxy.js       代理主程序
-config.bat     配置文件（目标 IP、端口、推理等级、Kimi 参数）
-start.bat      Windows 启动脚本
-start-background.ps1  后台启动辅助脚本
-stop.bat       Windows 停止脚本
-gui.vbs        无控制台图形界面启动脚本
-proxy-gui.ps1  图形界面主程序
+start.bat      启动代理（根目录入口）
+stop.bat       停止代理（根目录入口）
+gui.vbs        打开图形界面（根目录入口）
+scripts/       实现代码（proxy.js、proxy-gui.ps1、start.bat、stop.bat 等）
+config/        配置文件（config.bat）
 assets/        图标资源（logo.png / logo.ico）
 logs/          运行日志（proxy.log / proxy.err.log）
 ```
@@ -68,28 +66,30 @@ node --version
 把以下文件复制到新电脑的同一个文件夹中：
 
 ```text
-proxy.js
 start.bat
-start-background.ps1
 stop.bat
 gui.vbs
-proxy-gui.ps1
+scripts\proxy.js
+scripts\proxy-gui.ps1
+scripts\start-background.ps1
+scripts\start.bat
+scripts\stop.bat
+config\config.bat
 assets\logo.png
 assets\logo.ico
-config.bat
 ```
 
 `logs` 目录不是必须的；如果一起复制，程序会继续向现有日志追加内容。
 
 ### 3. 修改配置并确认网络条件
 
-按需编辑 `config.bat`，确认上游地址和推理等级。新电脑必须能够访问配置的上游服务：
+按需编辑 `config\config.bat`，确认上游地址和推理等级。新电脑必须能够访问配置的上游服务：
 
 ```text
 10.0.8.19:80
 ```
 
-如果目标服务器、端口或网络环境不同，直接修改 `config.bat` 中的 `TARGET_HOST` 和 `TARGET_PORT`。
+如果目标服务器、端口或网络环境不同，直接修改 `config\config.bat` 中的 `TARGET_HOST` 和 `TARGET_PORT`。
 
 ### 4. 启动代理
 
@@ -98,7 +98,7 @@ config.bat
 界面提供以下功能：
 
 - 显示代理运行状态、进程 PID、本地/目标地址和 Kimi 参数。
-- 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入 `config.bat`，下一次请求立即生效，无需重启代理，当前档位以绿色高亮。
+- 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入 `config\config.bat`，下一次请求立即生效，无需重启代理，当前档位以绿色高亮。
 - 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
 - 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可选择退出界面（不停止代理）。
 
@@ -107,7 +107,7 @@ config.bat
 如果需要在前台调试，也可以在项目目录执行：
 
 ```powershell
-node .\proxy.js
+node .\scripts\proxy.js
 ```
 
 后台启动后，`logs\proxy.log` 中会出现类似下面的内容，表示本地代理已经启动：
@@ -142,23 +142,23 @@ POST http://10.0.8.19:80/v1/chat/completions
 
 ## 配置
 
-推荐方式：直接编辑项目根目录的 `config.bat` 即可生效，推理等级会在下一次请求时自动读取，无需重启。
+推荐方式：直接编辑项目根目录的 `config\config.bat` 即可生效，推理等级会在下一次请求时自动读取，无需重启。
 
 ```bat
-rem 本地监听端口
+rem local listening port
 set PROXY_PORT=3120
 
-rem 上游服务器地址与端口
+rem upstream server address and port
 set TARGET_HOST=10.0.8.19
 set TARGET_PORT=80
 
-rem 默认推理强度（low / medium / high / max）
+rem default reasoning effort (low / medium / high / max)
 set REASONING_EFFORT=high
 
-rem Kimi 推理模型只允许 temperature=1，可在此调整
+rem kimi reasoning models accept temperature=1 and top_p=0.95 by default
 set KIMI_TEMPERATURE=1
 
-rem Kimi 推理模型只允许 top_p=0.95，可在此调整
+rem you can adjust these values if your upstream accepts others
 set KIMI_TOP_P=0.95
 ```
 
@@ -173,7 +173,7 @@ $env:TARGET_PORT = "80"
 $env:REASONING_EFFORT = "high"
 $env:KIMI_TEMPERATURE = "1"
 $env:KIMI_TOP_P = "0.95"
-node .\proxy.js
+node .\scripts\proxy.js
 ```
 
 ### CMD
@@ -185,7 +185,7 @@ set TARGET_PORT=80
 set REASONING_EFFORT=high
 set KIMI_TEMPERATURE=1
 set KIMI_TOP_P=0.95
-node proxy.js
+node scripts\proxy.js
 ```
 
 配置项说明：
@@ -199,7 +199,7 @@ node proxy.js
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 | `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `logs\proxy.log` 和 `logs\proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
+`start.bat` 启动时会自动加载 `config\config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `logs\proxy.log` 和 `logs\proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
 
 ## 简单验证
 
@@ -281,4 +281,4 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
   ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
-修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理：先按上面的方法停止旧实例，再双击 `start.bat`。推理等级不需要重启，在图形界面切换或编辑 `config.bat` 后下一次请求就会生效。
+修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理：先按上面的方法停止旧实例，再双击 `start.bat`。推理等级不需要重启，在图形界面切换或编辑 `config\config.bat` 后下一次请求就会生效。

@@ -55,7 +55,7 @@ if (-not $script:mutexCreatedNew) {
 }
 
 function Read-Config {
-    $configPath = Join-Path $PSScriptRoot 'config.bat'
+    $configPath = Join-Path $PSScriptRoot '..\config\config.bat'
     if (-not (Test-Path $configPath)) {
         return @{}
     }
@@ -70,7 +70,7 @@ function Read-Config {
 }
 
 function Set-ConfigValue([string]$Name, [string]$Value) {
-    $configPath = Join-Path $PSScriptRoot 'config.bat'
+    $configPath = Join-Path $PSScriptRoot '..\config\config.bat'
     $lines = if (Test-Path $configPath) {
         @([System.IO.File]::ReadAllLines($configPath))
     } else {
@@ -183,7 +183,7 @@ function Set-ReasoningEffort([string]$Value) {
 }
 
 function Get-LogText {
-    $path = Join-Path $PSScriptRoot 'logs\proxy.log'
+    $path = Join-Path $PSScriptRoot '..\logs\proxy.log'
     if (-not (Test-Path $path)) {
         return '日志文件不存在'
     }
@@ -684,7 +684,7 @@ $glowOpacityAnimation.Duration = [TimeSpan]::FromMilliseconds(900)
 $glowStoryboard.Children.Add($glowOpacityAnimation) | Out-Null
 $script:glowStoryboard = $glowStoryboard
 
-$logoPath = Join-Path $PSScriptRoot 'assets\logo.png'
+$logoPath = Join-Path $PSScriptRoot '..\assets\logo.png'
 $logoUri = New-Object System.Uri($logoPath)
 $logoBitmap = New-Object System.Windows.Media.Imaging.BitmapImage
 $logoBitmap.BeginInit()
@@ -705,7 +705,7 @@ $logToggleButton.Add_Click({ Toggle-LogPanel })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
-$script:appIcon = New-Object System.Drawing.Icon((Join-Path $PSScriptRoot 'assets\logo.ico'))
+$script:appIcon = New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '..\assets\logo.ico'))
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $notifyIcon.Icon = $script:appIcon
 $notifyIcon.Text = 'Reasoning Proxy'
