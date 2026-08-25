@@ -4,6 +4,8 @@
 
 它适合用于需要统一设置大模型推理强度的内部服务或 OpenAI 兼容 API 调试场景。
 
+项目还附带一个 WPF 图形界面（`gui.vbs` / `proxy-gui.ps1`），可以查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
+
 ## 运作原理
 
 整体请求链路如下：
@@ -28,7 +30,7 @@
 1. 在 `127.0.0.1:3120` 上监听请求。
 2. 读取请求体，并保留原来的请求方法、URL 和请求头。
 3. 当请求方法是 `POST`、内容类型包含 `application/json` 且请求体是合法 JSON 时，检查 `reasoning_effort` 字段。
-4. 如果字段不存在，就加入默认值 `high`；如果调用方已经设置，则不覆盖调用方的值。
+4. 如果字段不存在，就从 `config.bat` 读取 `REASONING_EFFORT` 并注入（默认 `high`）；如果调用方已经设置，则不覆盖调用方的值。
 5. 当模型名包含 `kimi` 时，把非配置值的 `temperature`、`top_p` 改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）。
 6. 将请求转发到目标主机和端口，并把上游响应原样返回给客户端。
 7. 尝试从响应前 2 MB 中提取提示词缓存统计，例如 `cached_tokens`，用于写入日志。
@@ -46,6 +48,7 @@ stop.bat       Windows 停止脚本
 gui.vbs        无控制台图形界面启动脚本
 proxy-gui.ps1  图形界面主程序
 logo.png / logo.ico  界面与托盘图标
+proxy.log / proxy.err.log  运行日志与错误日志
 ```
 
 ## 迁移到新电脑
@@ -90,7 +93,14 @@ config.bat
 
 ### 4. 启动代理
 
-双击 `gui.vbs` 可以打开深色图形界面，不会弹出 cmd 窗口。界面会显示运行状态、本地/目标地址和 Kimi 参数，并提供启动/停止按钮，窗口和托盘均使用 `logo` 图标。图形界面是单实例的，重复打开只会激活已有窗口。关闭界面窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可以选择退出界面（不停止代理）。
+双击 `gui.vbs` 可以打开深色图形界面，不会弹出 cmd 窗口，窗口和托盘均使用 `logo` 图标。图形界面是单实例的，重复打开只会激活已有窗口；即使界面隐藏到托盘，重复启动也会把已有窗口重新唤起。
+
+界面提供以下功能：
+
+- 显示代理运行状态、进程 PID、本地/目标地址和 Kimi 参数。
+- 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入 `config.bat`，下一次请求立即生效，无需重启代理，当前档位以绿色高亮。
+- 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
+- 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可选择退出界面（不停止代理）。
 
 也可以双击 `start.bat` 直接后台启动，不打开界面。代理会在后台运行，启动窗口几秒后会自动关闭。需要停止时双击 `stop.bat` 即可。
 
@@ -142,7 +152,7 @@ rem 上游服务器地址与端口
 set TARGET_HOST=10.0.8.19
 set TARGET_PORT=80
 
-rem 默认推理强度（UI 提供 low / medium / high / max）
+rem 默认推理强度（low / medium / high / max）
 set REASONING_EFFORT=high
 
 rem Kimi 推理模型只允许 temperature=1，可在此调整
@@ -185,11 +195,11 @@ node proxy.js
 | `PROXY_PORT` | `3120` | 本地监听端口 |
 | `TARGET_HOST` | `10.0.8.19` | 上游服务器地址 |
 | `TARGET_PORT` | `80` | 上游服务器端口 |
-| `REASONING_EFFORT` | `high` | 缺少字段时注入的默认推理强度 |
+| `REASONING_EFFORT` | `high` | 缺少字段时注入的默认推理强度（`low` / `medium` / `high` / `max`） |
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 | `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。图形界面里切换推理等级会直接更新 `config.bat`，代理按请求读取，不需要重启。
+`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。`REASONING_EFFORT` 由代理在每次请求时重新读取，因此图形界面里切换推理等级不需要重启代理；端口、目标地址和 Kimi 参数仍需要在启动前配置好。
 
 ## 简单验证
 
@@ -246,7 +256,11 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen
 
 ### 使用 Kimi 模型时提示 `invalid temperature` 或 `invalid top_p`
 
-Kimi 的推理模型只接受 `temperature=1` 和 `top_p=0.95`，而 VS Code Copilot 等客户端可能会发送其他值。代理现在会在请求中包含 `kimi` 模型名时，把非配置值的 `temperature`、`top_p` 自动改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）再转发；如果请求没有携带对应字段，则保持原样。
+Kimi 的推理模型默认只接受 `temperature=1` 和 `top_p=0.95`（可通过 `KIMI_TEMPERATURE`、`KIMI_TOP_P` 调整），而 VS Code Copilot 等客户端可能会发送其他值。代理现在会在请求中包含 `kimi` 模型名时，把非配置值的 `temperature`、`top_p` 自动改写为 `KIMI_TEMPERATURE`（默认 `1`）和 `KIMI_TOP_P`（默认 `0.95`）再转发；如果请求没有携带对应字段，则保持原样。
+
+### 使用 Kimi 模型时提示 `invalid reasoning_effort`
+
+Kimi K3 官方文档只接受 `low` / `high` / `max` 三档。图形界面里的 `medium` 是为兼容更多客户端/模型预留的档位；如果上游返回 `invalid reasoning_effort`，把推理等级切回 `low`、`high` 或 `max` 即可，切换后下一次请求立即生效。
 
 ## 安全注意事项
 
@@ -267,4 +281,4 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
   ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
-修改配置后需要重启：先按上面的方法停止旧实例，再双击 `start.bat`。
+修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理：先按上面的方法停止旧实例，再双击 `start.bat`。推理等级不需要重启，在图形界面切换或编辑 `config.bat` 后下一次请求就会生效。
