@@ -93,6 +93,51 @@ function Stop-Proxy {
     Update-Status
 }
 
+function Get-LogText {
+    $path = Join-Path $PSScriptRoot 'proxy.log'
+    if (-not (Test-Path $path)) {
+        return '日志文件不存在'
+    }
+
+    try {
+        $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $reader = New-Object System.IO.StreamReader($stream)
+            $content = $reader.ReadToEnd()
+        } finally {
+            $reader.Dispose()
+            $stream.Dispose()
+        }
+
+        $lines = $content -split "`r?`n" | Where-Object { $_.Length -gt 0 }
+        return ($lines | Select-Object -Last 200) -join "`r`n"
+    } catch {
+        return "无法读取日志: $($_.Exception.Message)"
+    }
+}
+
+function Update-LogPanel {
+    $text = Get-LogText
+    if ($script:logTextBox.Text -ne $text) {
+        $script:logTextBox.Text = $text
+        $script:logTextBox.ScrollToEnd()
+    }
+}
+
+function Toggle-LogPanel {
+    $script:logPanelVisible = -not $script:logPanelVisible
+    if ($script:logPanelVisible) {
+        $script:mainPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        $script:logPanel.Visibility = [System.Windows.Visibility]::Visible
+        $script:logToggleButton.Content = '返回状态'
+        Update-LogPanel
+    } else {
+        $script:logPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        $script:mainPanel.Visibility = [System.Windows.Visibility]::Visible
+        $script:logToggleButton.Content = '查看日志'
+    }
+}
+
 $config = Read-Config
 $script:Port = if ($config['PROXY_PORT']) { [int]$config['PROXY_PORT'] } else { 3120 }
 $targetHost = if ($config['TARGET_HOST']) { $config['TARGET_HOST'] } else { '10.0.8.19' }
@@ -101,6 +146,7 @@ $reasoningEffort = if ($config['REASONING_EFFORT']) { $config['REASONING_EFFORT'
 $kimiTemperature = if ($config['KIMI_TEMPERATURE']) { $config['KIMI_TEMPERATURE'] } else { '1' }
 $kimiTopP = if ($config['KIMI_TOP_P']) { $config['KIMI_TOP_P'] } else { '0.95' }
 $script:allowExit = $false
+$script:logPanelVisible = $false
 
 $xaml = @'
 <Window
@@ -188,6 +234,25 @@ $xaml = @'
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="HeaderButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#949EB4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border x:Name="Root" Background="#12151E" CornerRadius="16" BorderBrush="#2A3040" BorderThickness="1" Margin="12">
@@ -202,11 +267,13 @@ $xaml = @'
                     <Image x:Name="LogoImage" Width="48" Height="48" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="22,0,0,0" Stretch="Uniform"/>
                     <TextBlock x:Name="TitleText" Text="Reasoning Proxy" FontSize="18" FontWeight="Bold" Foreground="#EBEEF8" Margin="82,16,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                     <TextBlock x:Name="SubtitleText" Text="本地 API 反向代理" FontSize="12" Foreground="#949EB4" Margin="84,46,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Button x:Name="LogToggleButton" Style="{StaticResource HeaderButton}" Content="查看日志" Width="72" Height="30" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,52,0"/>
                     <Button x:Name="CloseButton" Style="{StaticResource CloseButton}" Content="&#x2715;" Width="34" Height="30" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0"/>
                 </Grid>
             </Border>
 
             <Grid Grid.Row="1" Margin="20,14,20,18">
+                <Grid x:Name="MainPanel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -273,6 +340,13 @@ $xaml = @'
                 </Grid>
 
                 <TextBlock x:Name="HintText" Grid.Row="3" Text="关闭窗口不会停止代理，界面会保留在系统托盘" FontSize="11" Foreground="#949EB4" Margin="0,12,0,0"/>
+                </Grid>
+
+                <Grid x:Name="LogPanel" Visibility="Collapsed">
+                    <Border Background="#1C2130" CornerRadius="12" Padding="10">
+                        <TextBox x:Name="LogTextBox" IsReadOnly="True" FontFamily="Consolas" FontSize="11" Background="#151924" Foreground="#C7D0E0" BorderThickness="0" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12"/>
+                    </Border>
+                </Grid>
             </Grid>
         </Grid>
     </Border>
@@ -289,12 +363,20 @@ $statusText = $window.FindName('StatusText')
 $pidText = $window.FindName('PidText')
 $startButton = $window.FindName('StartButton')
 $stopButton = $window.FindName('StopButton')
+$logToggleButton = $window.FindName('LogToggleButton')
+$mainPanel = $window.FindName('MainPanel')
+$logPanel = $window.FindName('LogPanel')
+$logTextBox = $window.FindName('LogTextBox')
 
 $script:statusDot = $statusDot
 $script:statusText = $statusText
 $script:pidText = $pidText
 $script:startButton = $startButton
 $script:stopButton = $stopButton
+$script:logToggleButton = $logToggleButton
+$script:mainPanel = $mainPanel
+$script:logPanel = $logPanel
+$script:logTextBox = $logTextBox
 
 $statusEffect = New-Object System.Windows.Media.Effects.DropShadowEffect
 $statusEffect.BlurRadius = 12
@@ -342,6 +424,7 @@ $window.FindName('KimiValue').Text = "temperature=$kimiTemperature  top_p=$kimiT
 
 $startButton.Add_Click({ Start-Proxy })
 $stopButton.Add_Click({ Stop-Proxy })
+$logToggleButton.Add_Click({ Toggle-LogPanel })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
@@ -391,7 +474,12 @@ $window.Add_Closing({
 
 $refreshTimer = New-Object System.Windows.Threading.DispatcherTimer
 $refreshTimer.Interval = [TimeSpan]::FromSeconds(2)
-$refreshTimer.Add_Tick({ Update-Status })
+$refreshTimer.Add_Tick({
+    Update-Status
+    if ($script:logPanelVisible) {
+        Update-LogPanel
+    }
+})
 $refreshTimer.Start()
 
 Update-Status
