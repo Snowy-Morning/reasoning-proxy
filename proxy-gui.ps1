@@ -525,19 +525,19 @@ $xaml = @'
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="34"/>
-                                <RowDefinition Height="34"/>
-                                <RowDefinition Height="34"/>
-                                <RowDefinition Height="34"/>
+                                <RowDefinition Height="30"/>
+                                <RowDefinition Height="30"/>
+                                <RowDefinition Height="30"/>
+                                <RowDefinition Height="30"/>
                             </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="本地地址" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock x:Name="LocalValue" Grid.Row="0" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="目标地址" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock x:Name="TargetValue" Grid.Row="1" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="推理等级" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <StackPanel x:Name="EffortButtons" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Kimi 参数" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,6,0,6"/>
-                            <TextBlock x:Name="KimiValue" Grid.Row="3" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,6,0,6"/>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="本地地址" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock x:Name="LocalValue" Grid.Row="0" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="目标地址" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock x:Name="TargetValue" Grid.Row="1" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="推理等级" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <StackPanel x:Name="EffortButtons" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Kimi 参数" Foreground="#949EB4" VerticalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock x:Name="KimiValue" Grid.Row="3" Grid.Column="1" Foreground="#EBEEF8" FontFamily="Consolas" VerticalAlignment="Center" Margin="0,4,0,4"/>
                         </Grid>
                     </Grid>
                 </Border>
