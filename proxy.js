@@ -1,12 +1,25 @@
 const http = require("http");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
 const PROXY_PORT = Number(process.env.PROXY_PORT || 3120);
 const TARGET_HOST = process.env.TARGET_HOST || "10.0.8.19";
 const TARGET_PORT = process.env.TARGET_PORT || "80";
-const REASONING_EFFORT = process.env.REASONING_EFFORT || "high";
 const KIMI_TEMPERATURE = Number(process.env.KIMI_TEMPERATURE || 1);
 const KIMI_TOP_P = Number(process.env.KIMI_TOP_P || 0.95);
+
+function readReasoningEffort() {
+  try {
+    const configPath = path.join(__dirname, "config.bat");
+    const content = fs.readFileSync(configPath, "utf8");
+    const match = content.match(/^\s*set\s+REASONING_EFFORT\s*=\s*(.*?)\s*$/m);
+    if (match && match[1].trim()) {
+      return match[1].trim();
+    }
+  } catch {}
+  return process.env.REASONING_EFFORT || "high";
+}
 
 function rewriteRequestBody(bodyBuffer) {
   let data;
@@ -20,9 +33,10 @@ function rewriteRequestBody(bodyBuffer) {
   let changed = false;
 
   if (data.reasoning_effort === undefined) {
-    data.reasoning_effort = REASONING_EFFORT;
+    const effort = readReasoningEffort();
+    data.reasoning_effort = effort;
     console.log(
-      `[proxy] injected reasoning_effort=${REASONING_EFFORT} for model=${data.model ?? "?"}`
+      `[proxy] injected reasoning_effort=${effort} for model=${data.model ?? "?"}`
     );
     changed = true;
   } else {
@@ -143,7 +157,7 @@ const server = http.createServer((req, res) => {
 server.listen(PROXY_PORT, "127.0.0.1", () => {
   console.log(`[proxy] listening on http://127.0.0.1:${PROXY_PORT}`);
   console.log(`[proxy] forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
-  console.log(`[proxy] default reasoning_effort=${REASONING_EFFORT}`);
+  console.log(`[proxy] default reasoning_effort=${readReasoningEffort()}`);
   console.log(`[proxy] default kimi temperature=${KIMI_TEMPERATURE}`);
   console.log(`[proxy] default kimi top_p=${KIMI_TOP_P}`);
 });

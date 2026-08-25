@@ -134,10 +134,6 @@ function Set-ReasoningEffort([string]$Value) {
     $script:reasoningEffort = $Value
     Set-ConfigValue 'REASONING_EFFORT' $Value
     Update-EffortButtons
-    if (Get-ProxyProcessId) {
-        Stop-Proxy
-        Start-Proxy
-    }
 }
 
 function Get-LogText {

@@ -132,7 +132,7 @@ POST http://10.0.8.19:80/v1/chat/completions
 
 ## 配置
 
-推荐方式：直接编辑项目根目录的 `config.bat`，然后重新运行 `start.bat` 即可生效。
+推荐方式：直接编辑项目根目录的 `config.bat` 即可生效，推理等级会在下一次请求时自动读取，无需重启。
 
 ```bat
 rem 本地监听端口
@@ -189,7 +189,7 @@ node proxy.js
 | `KIMI_TEMPERATURE` | `1` | Kimi 模型请求中的固定 `temperature` 值 |
 | `KIMI_TOP_P` | `0.95` | Kimi 模型请求中的固定 `top_p` 值 |
 
-`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。
+`start.bat` 启动时会自动加载 `config.bat`，端口占用检查和启动提示都会跟随配置的端口。代理启动后会在后台运行，日志追加到 `proxy.log` 和 `proxy.err.log`。如果配置文件不存在，程序会使用上表中的内置默认值。图形界面里切换推理等级会直接更新 `config.bat`，代理按请求读取，不需要重启。
 
 ## 简单验证
 
