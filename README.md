@@ -4,7 +4,7 @@
 
 它适合用于需要统一设置大模型推理强度的内部服务或 OpenAI 兼容 API 调试场景。
 
-项目还附带一个 WPF 图形界面（`gui.vbs` / `scripts\proxy-gui.ps1`），可以查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
+项目还附带一个 WPF 图形界面（`Reasoning Proxy.lnk` / `scripts\proxy-gui.ps1`），可以查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
 
 ## 运作原理
 
@@ -40,8 +40,8 @@
 ## 目录说明
 
 ```text
-gui.vbs        打开图形界面（根目录入口）
-scripts/       实现代码与命令行入口（start.bat、stop.bat、proxy.js 等）
+Reasoning Proxy.lnk  打开图形界面（使用 logo 图标的快捷方式）
+scripts/       实现代码与命令行入口（start.bat、stop.bat、gui.vbs、proxy.js 等）
 config/        配置文件（config.bat）
 assets/        图标资源（logo.png / logo.ico）
 logs/          运行日志（proxy.log / proxy.err.log）
@@ -64,9 +64,10 @@ node --version
 把以下文件复制到新电脑的同一个文件夹中：
 
 ```text
-gui.vbs
 scripts\proxy.js
 scripts\proxy-gui.ps1
+scripts\gui.vbs
+scripts\create-shortcut.ps1
 scripts\start-background.ps1
 scripts\start.bat
 scripts\stop.bat
@@ -89,7 +90,7 @@ assets\logo.ico
 
 ### 4. 启动代理
 
-双击 `gui.vbs` 可以打开深色图形界面，不会弹出 cmd 窗口，窗口和托盘均使用 `logo` 图标。图形界面是单实例的，重复打开只会激活已有窗口；即使界面隐藏到托盘，重复启动也会把已有窗口重新唤起。
+双击根目录的 `Reasoning Proxy.lnk` 可以打开深色图形界面，不会弹出 cmd 窗口，快捷方式、窗口和托盘均使用 `logo` 图标。图形界面是单实例的，重复打开只会激活已有窗口；即使界面隐藏到托盘，重复启动也会把已有窗口重新唤起。如果项目移动过位置，运行 `scripts\create-shortcut.ps1` 可以重新生成快捷方式；也可以直接双击 `scripts\gui.vbs`（文件本身是系统默认脚本图标）。
 
 界面提供以下功能：
 
