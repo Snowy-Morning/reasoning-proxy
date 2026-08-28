@@ -1,5 +1,6 @@
 param(
-    [string]$OutputName = "ReasoningProxy.exe"
+    [string]$OutputName = "ReasoningProxy.exe",
+    [string]$Version = "1.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +45,7 @@ if (-not (Test-Path (Join-Path $toolModules "resedit"))) {
     }
 }
 
-node (Join-Path $repoRoot "scripts\set-exe-icon.mjs") $outExe $iconPath $toolModules
+node (Join-Path $repoRoot "scripts\set-exe-icon.mjs") $outExe $iconPath $toolModules $Version
 if ($LASTEXITCODE -ne 0) {
     throw "setting exe icon failed with exit code $LASTEXITCODE"
 }

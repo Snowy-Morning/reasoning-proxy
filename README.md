@@ -111,6 +111,12 @@ reasoning-proxy/
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-exe.ps1
 ```
 
+默认版本号为 `1.0.0`。需要自定义版本时传入 `-Version`：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-exe.ps1 -Version "1.0.1"
+```
+
 打包成功后生成：
 
 ```text

@@ -3,9 +3,9 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const [exePath, iconPath, modulesDir] = process.argv.slice(2);
+const [exePath, iconPath, modulesDir, version = "1.0.0"] = process.argv.slice(2);
 if (!exePath || !iconPath || !modulesDir) {
-  console.error("usage: node scripts/set-exe-icon.mjs <exe> <ico> <node_modules-dir>");
+  console.error("usage: node scripts/set-exe-icon.mjs <exe> <ico> <node_modules-dir> [version]");
   process.exit(1);
 }
 
@@ -34,13 +34,17 @@ ResEdit.Resource.IconGroupEntry.replaceIconsForResource(
 
 const versionInfos = ResEdit.Resource.VersionInfo.fromEntries(resource.entries);
 if (versionInfos.length > 0) {
+  versionInfos[0].setFileVersion(version, 1033);
+  versionInfos[0].setProductVersion(version, 1033);
   versionInfos[0].setStringValues(
     { lang: 1033, codepage: 1200 },
     {
       FileDescription: "Reasoning Proxy",
+      FileVersion: version,
       InternalName: "ReasoningProxy",
       OriginalFilename: path.basename(exePath),
       ProductName: "Reasoning Proxy",
+      ProductVersion: version,
     }
   );
   versionInfos[0].outputToResourceEntries(resource.entries);
