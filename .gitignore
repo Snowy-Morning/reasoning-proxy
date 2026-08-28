@@ -5,3 +5,6 @@ logs/
 # 系统文件
 Thumbs.db
 Desktop.ini
+
+# 打包输出
+dist/

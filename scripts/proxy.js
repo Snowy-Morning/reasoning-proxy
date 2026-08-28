@@ -3,22 +3,73 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const PROXY_PORT = Number(process.env.PROXY_PORT || 3120);
-const TARGET_HOST = process.env.TARGET_HOST || "10.0.8.19";
-const TARGET_PORT = process.env.TARGET_PORT || "80";
-const KIMI_TEMPERATURE = Number(process.env.KIMI_TEMPERATURE || 1);
-const KIMI_TOP_P = Number(process.env.KIMI_TOP_P || 0.95);
+const ROOT_DIR = process.env.REASONING_PROXY_DIR || path.join(__dirname, "..");
+const CONFIG_PATH = path.join(ROOT_DIR, "config", "config.bat");
 
-function readReasoningEffort() {
+function readConfigValue(name, fallback) {
   try {
-    const configPath = path.join(__dirname, "..", "config", "config.bat");
-    const content = fs.readFileSync(configPath, "utf8");
-    const match = content.match(/^\s*set\s+REASONING_EFFORT\s*=\s*(.*?)\s*$/m);
+    const content = fs.readFileSync(CONFIG_PATH, "utf8");
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = content.match(new RegExp(`^\\s*set\\s+${escaped}\\s*=\\s*(.*?)\\s*$`, "m"));
     if (match && match[1].trim()) {
       return match[1].trim();
     }
   } catch {}
-  return process.env.REASONING_EFFORT || "high";
+  return fallback;
+}
+
+const PROXY_PORT = Number(readConfigValue("PROXY_PORT", process.env.PROXY_PORT || 3120));
+const TARGET_HOST = readConfigValue("TARGET_HOST", process.env.TARGET_HOST || "10.0.8.19");
+const TARGET_PORT = readConfigValue("TARGET_PORT", process.env.TARGET_PORT || "80");
+const KIMI_TEMPERATURE = Number(readConfigValue("KIMI_TEMPERATURE", process.env.KIMI_TEMPERATURE || 1));
+const KIMI_TOP_P = Number(readConfigValue("KIMI_TOP_P", process.env.KIMI_TOP_P || 0.95));
+
+function readReasoningEffort() {
+  return readConfigValue("REASONING_EFFORT", process.env.REASONING_EFFORT || "high");
+}
+
+function formatLogArg(arg) {
+  if (typeof arg === "string") return arg;
+  if (arg instanceof Error) return arg.stack || `${arg.name}: ${arg.message}`;
+  try {
+    return JSON.stringify(arg);
+  } catch {
+    return String(arg);
+  }
+}
+
+function appendLogFile(filePath, args) {
+  try {
+    const line = args.map(formatLogArg).join(" ") + "\n";
+    fs.appendFileSync(filePath, line, "utf8");
+  } catch {}
+}
+
+function enableFileLogging() {
+  const logsDir = path.join(ROOT_DIR, "logs");
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+  } catch {}
+
+  const stdoutPath = path.join(logsDir, "proxy.log");
+  const stderrPath = path.join(logsDir, "proxy.err.log");
+  const originalLog = console.log.bind(console);
+  const originalError = console.error.bind(console);
+
+  console.log = (...args) => {
+    originalLog(...args);
+    appendLogFile(stdoutPath, args);
+  };
+  console.info = console.log;
+  console.warn = console.log;
+  console.error = (...args) => {
+    originalError(...args);
+    appendLogFile(stderrPath, args);
+  };
+}
+
+if (String(process.env.REASONING_PROXY_FILE_LOG) === "1") {
+  enableFileLogging();
 }
 
 function rewriteRequestBody(bodyBuffer) {

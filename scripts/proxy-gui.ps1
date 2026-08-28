@@ -54,8 +54,19 @@ if (-not $script:mutexCreatedNew) {
     exit 0
 }
 
+$script:RuntimeRoot = if ($env:REASONING_PROXY_RUNTIME_DIR) {
+    $env:REASONING_PROXY_RUNTIME_DIR
+} else {
+    Split-Path -Parent $PSScriptRoot
+}
+$script:DataRoot = if ($env:REASONING_PROXY_DIR) {
+    $env:REASONING_PROXY_DIR
+} else {
+    $script:RuntimeRoot
+}
+
 function Read-Config {
-    $configPath = Join-Path $PSScriptRoot '..\config\config.bat'
+    $configPath = Join-Path $script:DataRoot 'config\config.bat'
     if (-not (Test-Path $configPath)) {
         return @{}
     }
@@ -70,7 +81,11 @@ function Read-Config {
 }
 
 function Set-ConfigValue([string]$Name, [string]$Value) {
-    $configPath = Join-Path $PSScriptRoot '..\config\config.bat'
+    $configPath = Join-Path $script:DataRoot 'config\config.bat'
+    $configDir = Split-Path -Parent $configPath
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+    }
     $lines = if (Test-Path $configPath) {
         @([System.IO.File]::ReadAllLines($configPath))
     } else {
@@ -151,8 +166,19 @@ function Start-Proxy {
     $script:statusText.Text = '正在启动...'
     $script:statusText.Foreground = $yellow
     $script:pidText.Text = '请稍候'
-    $startBat = Join-Path $PSScriptRoot 'start.bat'
-    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$startBat`"" -WorkingDirectory $PSScriptRoot -WindowStyle Hidden
+    $logDir = Join-Path $script:DataRoot 'logs'
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    if ($env:REASONING_PROXY_EXE) {
+        $env:REASONING_PROXY_DIR = $script:DataRoot
+        $env:REASONING_PROXY_FILE_LOG = '1'
+        Start-Process -FilePath $env:REASONING_PROXY_EXE -ArgumentList '--proxy' -WorkingDirectory $script:DataRoot -WindowStyle Hidden
+    } else {
+        $startBat = Join-Path $PSScriptRoot 'start.bat'
+        Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$startBat`"" -WorkingDirectory $PSScriptRoot -WindowStyle Hidden
+    }
 }
 
 function Stop-Proxy {
@@ -183,7 +209,7 @@ function Set-ReasoningEffort([string]$Value) {
 }
 
 function Get-LogText {
-    $path = Join-Path $PSScriptRoot '..\logs\proxy.log'
+    $path = Join-Path $script:DataRoot 'logs\proxy.log'
     if (-not (Test-Path $path)) {
         return '日志文件不存在'
     }
@@ -684,7 +710,7 @@ $glowOpacityAnimation.Duration = [TimeSpan]::FromMilliseconds(900)
 $glowStoryboard.Children.Add($glowOpacityAnimation) | Out-Null
 $script:glowStoryboard = $glowStoryboard
 
-$logoPath = Join-Path $PSScriptRoot '..\assets\logo.png'
+$logoPath = Join-Path $script:RuntimeRoot 'assets\logo.png'
 $logoUri = New-Object System.Uri($logoPath)
 $logoBitmap = New-Object System.Windows.Media.Imaging.BitmapImage
 $logoBitmap.BeginInit()
@@ -705,7 +731,7 @@ $logToggleButton.Add_Click({ Toggle-LogPanel })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
-$script:appIcon = New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '..\assets\logo.ico'))
+$script:appIcon = New-Object System.Drawing.Icon((Join-Path $script:RuntimeRoot 'assets\logo.ico'))
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $notifyIcon.Icon = $script:appIcon
 $notifyIcon.Text = 'Reasoning Proxy'

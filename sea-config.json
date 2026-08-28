@@ -1,0 +1,15 @@
+{
+  "main": "build/sea-entry.js",
+  "output": "build/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "assets": {
+    "scripts/proxy.js": "scripts/proxy.js",
+    "scripts/proxy-gui.ps1": "scripts/proxy-gui.ps1",
+    "scripts/start.bat": "scripts/start.bat",
+    "scripts/start-background.ps1": "scripts/start-background.ps1",
+    "scripts/gui.vbs": "scripts/gui.vbs",
+    "assets/logo.png": "assets/logo.png",
+    "assets/logo.ico": "assets/logo.ico",
+    "config/config.bat": "config/config.bat"
+  }
+}
