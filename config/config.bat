@@ -50,7 +50,7 @@ rem when set, only ids containing one of these are added
 set LM_INCLUDE_MODELS=
 
 rem how many chatLanguageModels.json.bak-* backups to keep for each target file,
-recycled on every real write. set 0 or less to keep every backup forever
+rem recycled on every real write. set 0 or less to keep every backup forever
 set LM_BACKUP_KEEP=10
 
 rem used only when the proxy is stopped, or before it has seen a VS Code request;
