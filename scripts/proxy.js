@@ -23,6 +23,145 @@ const TARGET_HOST = readConfigValue("TARGET_HOST", process.env.TARGET_HOST || "1
 const TARGET_PORT = readConfigValue("TARGET_PORT", process.env.TARGET_PORT || "80");
 const KIMI_TEMPERATURE = Number(readConfigValue("KIMI_TEMPERATURE", process.env.KIMI_TEMPERATURE || 1));
 const KIMI_TOP_P = Number(readConfigValue("KIMI_TOP_P", process.env.KIMI_TOP_P || 0.95));
+const LM_API_KEY = readConfigValue("LM_API_KEY", process.env.LM_API_KEY || "");
+
+// Loopback-only helpers the GUI can call without learning about the upstream.
+const INTERNAL_PREFIX = "/__reasoning_proxy/";
+const MODELS_FETCH_TIMEOUT_MS = 15000;
+
+// The Authorization header most recently forwarded upstream. Reusing it lets the
+// GUI list upstream models without the key ever being typed in or written to disk.
+let lastAuthorization = "";
+
+function getAuthSource() {
+  if (lastAuthorization) return "captured";
+  if (LM_API_KEY) return "config";
+  return "none";
+}
+
+function pickModelIds(payload) {
+  const source = Array.isArray(payload)
+    ? payload
+    : payload && (payload.data || payload.models || payload.models?.data);
+  if (!Array.isArray(source)) return null;
+  const ids = [];
+  for (const item of source) {
+    const id = typeof item === "string" ? item : item && item.id;
+    if (typeof id === "string" && id.trim()) ids.push(id.trim());
+  }
+  return ids;
+}
+
+function sendJson(res, status, body) {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, {
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(payload),
+    "cache-control": "no-store",
+  });
+  res.end(payload);
+}
+
+function proxyModelsRequest(res) {
+  const auth = lastAuthorization || LM_API_KEY;
+  const authSource = getAuthSource();
+  const headers = {
+    host: `${TARGET_HOST}:${TARGET_PORT}`,
+    accept: "application/json",
+  };
+  if (auth) headers.authorization = auth;
+
+  const upstream = http.request(
+    {
+      host: TARGET_HOST,
+      port: TARGET_PORT,
+      path: "/v1/models",
+      method: "GET",
+      headers,
+    },
+    (upstreamRes) => {
+      const chunks = [];
+      let bytes = 0;
+      upstreamRes.on("data", (chunk) => {
+        if (bytes < 2 * 1024 * 1024) {
+          chunks.push(chunk);
+          bytes += chunk.length;
+        }
+      });
+      upstreamRes.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        const status = upstreamRes.statusCode || 0;
+        let payload = null;
+        try {
+          payload = JSON.parse(text);
+        } catch {}
+        const ids = pickModelIds(payload);
+        if (status >= 200 && status < 300 && ids) {
+          console.log(`[proxy] models list: ${ids.length} model(s) from upstream, auth=${authSource}`);
+          sendJson(res, 200, {
+            ok: true,
+            models: ids,
+            count: ids.length,
+            authSource,
+            upstreamStatus: status,
+          });
+          return;
+        }
+        console.warn(
+          `[proxy] models list failed: status=${status} auth=${authSource} body=${text.slice(0, 240)}`
+        );
+        sendJson(res, status >= 400 ? status : 502, {
+          ok: false,
+          error:
+            status === 401 || status === 403
+              ? "upstream rejected the model list request"
+              : "upstream did not return a model list",
+          authSource,
+          upstreamStatus: status,
+          body: text.slice(0, 500),
+        });
+      });
+    }
+  );
+
+  upstream.setTimeout(MODELS_FETCH_TIMEOUT_MS, () => {
+    upstream.destroy(new Error(`timed out after ${MODELS_FETCH_TIMEOUT_MS}ms`));
+  });
+  upstream.on("error", (err) => {
+    console.error(`[proxy] models list error: ${err.message}`);
+    if (!res.headersSent) {
+      sendJson(res, 502, {
+        ok: false,
+        error: `could not reach ${TARGET_HOST}:${TARGET_PORT}: ${err.message}`,
+        authSource,
+      });
+    }
+  });
+  upstream.end();
+}
+
+function handleInternalRequest(req, res) {
+  const route = String(req.url || "").split("?")[0];
+  if (req.method !== "GET") {
+    sendJson(res, 405, { ok: false, error: "method not allowed" });
+    return;
+  }
+  if (route === `${INTERNAL_PREFIX}models`) {
+    proxyModelsRequest(res);
+    return;
+  }
+  if (route === `${INTERNAL_PREFIX}status`) {
+    sendJson(res, 200, {
+      ok: true,
+      listening: PROXY_PORT,
+      target: `${TARGET_HOST}:${TARGET_PORT}`,
+      reasoningEffort: readReasoningEffort(),
+      authSource: getAuthSource(),
+    });
+    return;
+  }
+  sendJson(res, 404, { ok: false, error: `unknown route ${route}` });
+}
 
 function readReasoningEffort() {
   return readConfigValue("REASONING_EFFORT", process.env.REASONING_EFFORT || "high");
@@ -143,10 +282,22 @@ function extractCacheStats(buffer) {
 }
 
 const server = http.createServer((req, res) => {
+  const url = String(req.url || "");
+  if (url.startsWith(INTERNAL_PREFIX)) {
+    handleInternalRequest(req, res);
+    return;
+  }
+
   const chunks = [];
   req.on("data", (chunk) => chunks.push(chunk));
   req.on("end", () => {
     let bodyBuffer = Buffer.concat(chunks);
+
+    // Remember the credential the client already sends so the model list can
+    // reuse it later. Only the header value is kept, in memory, for this process.
+    if (typeof req.headers["authorization"] === "string" && req.headers["authorization"]) {
+      lastAuthorization = req.headers["authorization"];
+    }
 
     const contentType = String(req.headers["content-type"] || "");
     if (
