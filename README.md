@@ -135,6 +135,7 @@ dist\ReasoningProxy.exe
 
 - 双击 `ReasoningProxy.exe`：打开图形界面。
 - 执行 `ReasoningProxy.exe --proxy`：后台代理模式。
+- 执行 `ReasoningProxy.exe --uninstall`：清理本工具生成的运行文件，见「卸载」。
 - 打包版第一次启动可能出现一次黑色控制台闪烁，这是 Node SEA 控制台程序的限制；代理进程本身可以隐藏窗口运行。
 - 打包前请关闭正在运行的 `ReasoningProxy.exe`，否则旧的 `dist` 目录可能被占用。
 
@@ -360,3 +361,16 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 ```
 
 修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理。推理等级不需要重启，修改后下一次请求立即生效。
+
+## 卸载
+
+执行 `ReasoningProxy.exe --uninstall`，它会：
+
+1. 结束仍在运行的本工具进程（图形界面和后台代理）。只匹配本程序的 exe 路径与它自己的数据目录，从源码目录里起的代理不会被波及。
+2. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录和备用 `data` 目录。
+3. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
+4. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
+
+VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。命令会顺带打印该目录下最近一个 `chatLanguageModels.json.bak-*` 的路径，需要回滚时用它的名字找即可。
+
+源码模式不需要卸载，删除项目目录就行。

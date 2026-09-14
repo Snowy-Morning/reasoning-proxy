@@ -182,6 +182,121 @@ function startGui(runtime, dataDir) {
   }
 }
 
+// ReasoningProxy.exe --uninstall stops the app's own processes and deletes the
+// folders it created. VS Code's chatLanguageModels.json is deliberately kept:
+// it can hold providers this tool never touched, so reverting it is a human call.
+function stopRelatedProcesses(patterns, selfPid) {
+  const command = [
+    "$pats = @()",
+    "foreach ($p in ($env:RP_UNINSTALL_PATTERNS -split '[\\r\\n]+')) { if ($p) { $pats += [regex]::Escape($p) } }",
+    "if ($pats.Count -eq 0) { exit 0 }",
+    "$re = $pats -join '|'",
+    "$self = [int]$env:RP_UNINSTALL_SELF_PID",
+    // A plain foreach shares scope with its caller, while ForEach-Object would trap
+    // the counter inside its scriptblock and the report would claim zero stops.
+    "$victims = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+    "  ($_.ProcessId -ne $self) -and (('{0} {1}' -f $_.ExecutablePath, $_.CommandLine) -match $re)",
+    "})",
+    "$killed = 0",
+    "foreach ($target in $victims) {",
+    "  try { Stop-Process -Id $target.ProcessId -Force -ErrorAction Stop; $killed += 1 } catch {}",
+    "}",
+    "Write-Output \"[uninstall] stopped $killed related process(es)\"",
+  ].join("\n");
+  const encoded = Buffer.from(command, "utf16le").toString("base64");
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
+    {
+      windowsHide: true,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        RP_UNINSTALL_PATTERNS: patterns.join("\n"),
+        RP_UNINSTALL_SELF_PID: String(selfPid),
+      },
+    }
+  );
+  if (result.stdout) process.stdout.write(result.stdout);
+}
+
+function removeTree(dir, removed, problems) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    removed.push(dir);
+  } catch (err) {
+    problems.push(`${dir} (${err.message})`);
+  }
+}
+
+// A folder next to the exe only counts as ours when it carries something this app
+// demonstrably wrote, so an unrelated "logs" or "config" directory survives.
+const OWN_LOG_NAMES = ["proxy.log", "proxy.err.log", "lm-sync.log"];
+
+function ownsLogsDir(dir) {
+  try {
+    const names = new Set(fs.readdirSync(dir));
+    return OWN_LOG_NAMES.some((name) => names.has(name));
+  } catch {
+    return false;
+  }
+}
+
+function ownsConfigDir(dir) {
+  try {
+    return /LM_PROVIDER_NAME|REASONING_PROXY/.test(
+      fs.readFileSync(path.join(dir, "config.bat"), "latin1")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function reportEditorModels() {
+  const appData = process.env.APPDATA;
+  if (!appData) return;
+  const userDir = path.join(appData, "Code", "User");
+  const target = path.join(userDir, "chatLanguageModels.json");
+  if (!fs.existsSync(target)) {
+    console.log("[uninstall] no VS Code chatLanguageModels.json to keep");
+    return;
+  }
+  console.log(`[uninstall] kept ${target} (it may hold providers you added by hand)`);
+  let newest = "";
+  try {
+    const backups = fs
+      .readdirSync(userDir)
+      .filter((name) => /^chatLanguageModels\.json\.bak-\d{8}-\d{6}$/.test(name))
+      .sort();
+    if (backups.length > 0) newest = backups[backups.length - 1];
+  } catch {}
+  if (newest) {
+    console.log(`[uninstall] newest backup: ${path.join(userDir, newest)}`);
+  }
+}
+
+function uninstall(exeDir) {
+  const baseDir = path.join(appDataDir(), "ReasoningProxy");
+  // Match on the folder we are deleting and on this exe, so a proxy started from
+  // a source checkout is left running. The current process is excluded by pid.
+  stopRelatedProcesses([baseDir, process.execPath], process.pid);
+
+  const removed = [];
+  const problems = [];
+  removeTree(baseDir, removed, problems);
+
+  // A portable layout keeps settings and logs next to the exe.
+  const logsDir = path.join(exeDir, "logs");
+  if (ownsLogsDir(logsDir)) removeTree(logsDir, removed, problems);
+  const configDir = path.join(exeDir, "config");
+  if (ownsConfigDir(configDir)) removeTree(configDir, removed, problems);
+
+  for (const dir of removed) console.log(`[uninstall] removed ${dir}`);
+  for (const problem of problems) console.log(`[uninstall] could not remove ${problem}`);
+  reportEditorModels();
+  console.log(`[uninstall] delete ${process.execPath} to finish`);
+}
+
 function main() {
   const exeDir = path.dirname(process.execPath);
 
@@ -192,6 +307,14 @@ function main() {
   }
 
   const args = process.argv.slice(2);
+
+  // Handle this before extracting anything: an uninstall should not recreate the
+  // runtime folders it is about to delete.
+  if (args.includes("--uninstall")) {
+    uninstall(exeDir);
+    return;
+  }
+
   const proxyMode = args.includes("--proxy");
   const runtime = process.env.REASONING_PROXY_RUNTIME_DIR || extractRuntime();
   const dataDir =
