@@ -13,6 +13,7 @@ Reasoning Proxy 是一个本地 HTTP 反向代理，附带一个 WPF 图形界�
 - 对 JSON POST 请求自动注入缺失的 `reasoning_effort`。
 - 模型名包含 `kimi` 时，把 `temperature` 和 `top_p` 改写为配置值。
 - 提供图形界面，可查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
+- 一键把上游模型列表同步进 VS Code 的 `chatLanguageModels.json`，同步前可以在表格里逐个勾选模型、改上下文窗口和图片处理，勾选结果就是最终列表。
 - 支持打包为单文件 exe，内置 Node.js 运行时、代理脚本、GUI 脚本、图标和默认配置。
 
 ## 快速开始
@@ -194,6 +195,57 @@ node .\scripts\proxy.js
 - 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入配置，下一次请求立即生效。
 - 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
 - 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可退出界面。
+
+### 同步上游模型到 VS Code
+
+点击“同步上游模型到 VS Code”（系统托盘右键菜单里也有同名项），会先拉取上游 `/v1/models`，然后弹出一个选择窗口。这个工具只针对 VS Code，写入目标固定是 `%APPDATA%\Code\User\chatLanguageModels.json`，路径显示在窗口标题下面。
+
+- 窗口是一张表格，列为 `模型名称` / `上下文窗口` / `图片处理方式`，支持搜索和全选、全不选、只勾新增。`只勾新增` 会取消勾选已配置的那些，也就是把它们一并删掉，底部会先显示“移除几个”再让你确认。
+- 已经配置过的模型置顶并默认勾选，`上下文窗口` 那格的水印写的就是文件里现在的值，`图片处理方式` 下拉也是当前值。不改它就等于不动它：同步时这条会被原样写回，连格式都不变。改了哪个单元格，就地更新那一条的 `maxInputTokens` 或 `vision`，其余字段保留。
+- 上游已经不再返回、但文件里还留着的模型会单独列一行，标记为 `仅本地`，同样默认勾选；不想留就取消勾选。
+- `上下文窗口` 一格永远是空的，水印写的是这格留空时会用的值。已配置的模型用文件里的值；只有文件里还没有的模型才走默认，先看 `LM_MODEL_CONTEXT` 命中的那一族，再退到 `LM_MAX_INPUT_TOKENS`（默认 `1M`）。想单独指定就直接填，接受 `1M`、`200K`、`1000000` 三种写法。
+- `图片处理方式` 下拉选择 `原样发送图片`（`vision: true`）或 `不发送图片`（`vision: false`）。
+- 底部实时显示“新增 · 更新 · 移除 · 保持 · 跳过”各几个，确认后再点“同步”。
+
+上游的 `/v1/models` 只返回 `id` / `type` / `display_name` / `created_at`，没有任何上下文长度或能力字段，`/v1/models/<id>` 也是 404，所以上下文窗口无法自动获取。想让它按模型族各走各的默认值，用 `LM_MODEL_CONTEXT` 配一次：
+
+```bat
+set LM_MODEL_CONTEXT=claude=1M,gpt-6=1M,gpt=200K,kimi=256K
+```
+
+按子串匹配，写在前面的优先，命中就用它，没命中的走 `LM_MAX_INPUT_TOKENS`。自动同步（`LM_AUTOSYNC=1`）同样吃这份配置。
+
+勾选的列表就是最终状态：点“同步”后，本代理那一组 provider 里没被勾选的模型会被删除，勾了的会按需新增或就地改字段，完全没动过的条目即使勾选也不会被重写，所以不会产生多余的备份。删除只发生在本代理自己的那一组里，别的 provider 一律不碰；如果界面识别不出哪一组属于本代理，就退化成只新增不删除。一个都没勾时直接拒绝执行，避免误清空。上游已经消失但仍被勾选的模型照常保留。每次真正写入前都会在同目录生成 `chatLanguageModels.json.bak-时间戳` 备份，完整记录写在 `logs\lm-sync.log`。
+
+自动同步（`LM_AUTOSYNC=1`）走的是另一套规则：它没有人帮忙确认，所以只追加、不删除，上游偶尔抽风也不会把已有配置清空。
+
+改完后在 VS Code 里执行一次“开发人员: 重新加载窗口”即可看到新模型。
+
+密钥不需要手动填写，按以下顺序自动获取：
+
+1. 复用代理正在替 VS Code 转发的 `Authorization` 头（代理进程内内存转发，不落盘）。
+2. `config\config.bat` 里的 `LM_API_KEY`。
+3. `~\.codex\auth.json` 里的 `OPENAI_API_KEY`，仅当 `~\.codex\config.toml` 的 `base_url` 指向同一个上游主机时才使用。
+4. 环境变量 `LM_API_KEY` / `OPENAI_API_KEY`。
+
+四条都拿不到时才会弹窗询问。密钥只用于那一次 `GET /v1/models`，不会被写进任何文件；`chatLanguageModels.json` 里保存的仍是 VS Code 自己的 `${input:chat.lm.secret.*}` 引用。
+
+代理额外提供两个仅监听 `127.0.0.1` 的内部路由，供界面查询状态和借用请求头，不会转发到上游：`GET /__reasoning_proxy/status` 和 `GET /__reasoning_proxy/models`。
+
+`config\config.bat` 中的可调项：
+
+| 键 | 作用 | 默认值 |
+| --- | --- | --- |
+| `LM_CONFIG_PATH` | 指定要写入的 `chatLanguageModels.json`，留空则用 VS Code stable 的路径 | 空 |
+| `LM_MODEL_URL` | 写进每个模型条目的地址 | `http://127.0.0.1:PROXY_PORT/v1` |
+| `LM_PROVIDER_NAME` | 新建 provider 块时使用的名字 | `Reasoning Proxy` |
+| `LM_MAX_INPUT_TOKENS` / `LM_MAX_OUTPUT_TOKENS` | 新增模型的默认上下文与输出上限 | `1000000` / `128000` |
+| `LM_TOOL_CALLING` / `LM_VISION` | 新增模型默认是否开启工具调用与视觉 | `1` / `1` |
+| `LM_MODEL_CONTEXT` | 按模型族预填表格里的上下文窗口，首个命中的子串生效 | 空 |
+| `LM_SKIP_MODELS` | 模型 id 命中这些子串时在选择窗口里标为 `已过滤`，不可勾选 | `embedding,rerank,...` |
+| `LM_INCLUDE_MODELS` | 非空时只有命中这些子串的模型可勾选 | 空 |
+| `LM_API_KEY` | 直连上游时使用的密钥 | 空 |
+| `LM_AUTOSYNC` | 设为 `1` 时，代理捕获到 VS Code 请求后自动同步一次，不弹选择窗口 | `0` |
 
 ## 简单验证
 
