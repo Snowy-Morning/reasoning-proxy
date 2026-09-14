@@ -52,12 +52,47 @@ function writeAssetIfChanged(target, content) {
   fs.writeFileSync(target, content);
 }
 
+// Runtime folders are keyed by asset hash, so every released version leaves one
+// behind forever unless a later launch clears the others.
+const RUNTIME_NAME_RE = /^[0-9a-f]{16}$/;
+const RUNTIME_PRUNE_GRACE_MS = 6 * 60 * 60 * 1000;
+
+function pruneStaleRuntimes(currentDir) {
+  const baseDir = path.dirname(currentDir);
+  let entries;
+  try {
+    entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const now = Date.now();
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !RUNTIME_NAME_RE.test(entry.name)) continue;
+    if (entry.name === path.basename(currentDir)) continue;
+    const staleDir = path.join(baseDir, entry.name);
+    // An older build may still be open in another window and dot-sources files
+    // from its own folder on demand, so leave anything touched recently alone and
+    // never fail the launch over a folder that refuses to go away.
+    try {
+      if (now - fs.statSync(staleDir).mtimeMs < RUNTIME_PRUNE_GRACE_MS) continue;
+      fs.rmSync(staleDir, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
+      removed += 1;
+    } catch {}
+  }
+  if (removed > 0) {
+    console.log(`[sea] pruned ${removed} stale runtime folder(s)`);
+  }
+}
+
 function extractRuntime() {
   const dir = runtimeDir();
   ensureDir(dir);
   for (const name of ASSET_NAMES) {
     writeAssetIfChanged(path.join(dir, name), getAssetBuffer(name));
   }
+  pruneStaleRuntimes(dir);
   return dir;
 }
 
