@@ -247,6 +247,51 @@ function Get-LmFlatArray([object]$Value) {
     return ,$items.ToArray()
 }
 
+# Our own backup file names only: this target's name plus the exact stamp format.
+function Test-LmBackupName {
+    param(
+        [string]$Name,
+        [string]$Prefix
+    )
+
+    return $Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase) -and
+        $Name.Substring($Prefix.Length) -match '^\d{8}-\d{6}$'
+}
+
+# Backups written before the move are still sitting next to the editor's own file,
+# where the new recycle pass cannot reach them and an uninstall would abandon them.
+# Relocate instead of deleting: they may hold the only copy of an older sync, and
+# the destination folder is the one place that gets cleaned up.
+function Move-LmStrayBackups {
+    param(
+        [string]$SourceDir,
+        [string]$DestDir,
+        [string]$Prefix
+    )
+
+    try {
+        $strays = @(Get-ChildItem -LiteralPath $SourceDir -File -Force |
+            Where-Object { Test-LmBackupName -Name $_.Name -Prefix $Prefix })
+    } catch {
+        return 0
+    }
+
+    $moved = 0
+    foreach ($stray in $strays) {
+        $target = Join-Path $DestDir $stray.Name
+        # Never overwrite: a clash means something already accounted for owns the
+        # name, and the stray is better left where it is than lost.
+        if (Test-Path -LiteralPath $target) {
+            continue
+        }
+        try {
+            Move-Item -LiteralPath $stray.FullName -Destination $target -ErrorAction Stop
+            $moved += 1
+        } catch {}
+    }
+    return $moved
+}
+
 function Write-LmJsonFile {
     param(
         [string]$Path,
@@ -269,6 +314,7 @@ function Write-LmJsonFile {
     if (-not $backupDir) {
         $backupDir = $parent
     }
+    $prefix = $fileName + '.bak-'
 
     $backupPath = $null
     if (Test-Path -LiteralPath $Path) {
@@ -287,19 +333,20 @@ function Write-LmJsonFile {
         $json += "`n"
     }
 
+    if ($backupDir -and $parent -and ($backupDir -ne $parent)) {
+        # Swallow the count: this function returns the backup path, not a tuple.
+        $null = Move-LmStrayBackups -SourceDir $parent -DestDir $backupDir -Prefix $prefix
+    }
+
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $json, $encoding)
 
     if ($KeepBackups -gt 0 -and $backupDir -and (Test-Path -LiteralPath $backupDir)) {
         # Match on this file's own name plus the exact stamp we write, so a folder
         # holding several targets never loses something that is not ours.
-        $prefix = $fileName + '.bak-'
         try {
             $staleBackups = @(Get-ChildItem -LiteralPath $backupDir -File -Force |
-                Where-Object {
-                    $_.Name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) -and
-                    $_.Name.Substring($prefix.Length) -match '^\d{8}-\d{6}$'
-                } |
+                Where-Object { Test-LmBackupName -Name $_.Name -Prefix $prefix } |
                 Sort-Object Name -Descending |
                 Select-Object -Skip $KeepBackups)
             foreach ($old in $staleBackups) {
