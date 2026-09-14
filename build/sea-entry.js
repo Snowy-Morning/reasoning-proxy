@@ -252,38 +252,114 @@ function ownsConfigDir(dir) {
   }
 }
 
-function reportEditorModels() {
-  const appData = process.env.APPDATA;
-  if (!appData) return;
-  const userDir = path.join(appData, "Code", "User");
-  const target = path.join(userDir, "chatLanguageModels.json");
-  if (!fs.existsSync(target)) {
-    console.log("[uninstall] no VS Code chatLanguageModels.json to keep");
-    return;
-  }
-  console.log(`[uninstall] kept ${target} (it may hold providers you added by hand)`);
-  let newest = "";
+// Backups sit in one folder per synced target, named <file>.bak-<yyyymmdd>-<hhmmss>.
+// The name is the clock: mtime cannot be trusted because the copy inherits the
+// mtime of the version being backed up.
+const BACKUP_STAMP_RE = /\.bak-(\d{8}-\d{6})$/;
+
+function newestBackupFile(root) {
+  let groups;
   try {
-    const backups = fs
-      .readdirSync(userDir)
-      .filter((name) => /^chatLanguageModels\.json\.bak-\d{8}-\d{6}$/.test(name))
-      .sort();
-    if (backups.length > 0) newest = backups[backups.length - 1];
-  } catch {}
-  if (newest) {
-    console.log(`[uninstall] newest backup: ${path.join(userDir, newest)}`);
+    groups = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return "";
+  }
+  let newest = "";
+  let newestStamp = "";
+  for (const group of groups) {
+    if (!group.isDirectory()) continue;
+    let names;
+    try {
+      names = fs.readdirSync(path.join(root, group.name));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const match = BACKUP_STAMP_RE.exec(name);
+      if (match && match[1] > newestStamp) {
+        newestStamp = match[1];
+        newest = path.join(root, group.name, name);
+      }
+    }
+  }
+  return newest;
+}
+
+function reportLeftovers(backupsDir, newest, keepBackups, customDir) {
+  const appData = process.env.APPDATA;
+  const target = appData
+    ? path.join(appData, "Code", "User", "chatLanguageModels.json")
+    : "";
+  if (target && !fs.existsSync(target)) {
+    console.log("[uninstall] no VS Code chatLanguageModels.json to keep");
+  } else if (target) {
+    console.log(`[uninstall] kept ${target} (it may hold providers you added by hand)`);
+  }
+  if (keepBackups) {
+    console.log(`[uninstall] kept backups under ${backupsDir}`);
+    if (newest) console.log(`[uninstall] newest backup: ${newest}`);
+  } else if (newest) {
+    console.log(`[uninstall] removed the backups, newest was ${newest}`);
+  }
+  if (customDir) {
+    console.log(`[uninstall] LM_BACKUP_DIR is ${customDir}, remove it by hand if you want it gone`);
   }
 }
 
-function uninstall(exeDir) {
+// LM_BACKUP_DIR can point outside the tree we remove. Uninstall never chases it:
+// deleting a path somebody typed by hand is a bigger risk than leaving a clearly
+// named folder in place, so the leftover is reported and the user decides.
+function configuredBackupRoot(configDirs) {
+  for (const dir of configDirs) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(dir, "config.bat"), "latin1");
+    } catch {
+      continue;
+    }
+    const match = /^[ \t]*set[ \t]+LM_BACKUP_DIR=(.*)$/im.exec(text);
+    if (!match) continue;
+    const value = match[1].replace(/["']/g, "").trim();
+    if (!value) return "";
+    return value.replace(/%([^%]+)%/g, (all, name) => process.env[name] || all);
+  }
+  return "";
+}
+
+function isInside(child, parent) {
+  const a = path.resolve(child).toLowerCase();
+  const b = path.resolve(parent).toLowerCase();
+  return a === b || a.startsWith(b + path.sep);
+}
+
+// Mirrors Resolve-LmBackupDir in language-models.ps1: backups live inside the
+// same folder --uninstall removes, so nothing of ours can survive it.
+function uninstall(exeDir, keepBackups) {
   const baseDir = path.join(appDataDir(), "ReasoningProxy");
+  const backupsDir = path.join(baseDir, "backups");
+  const custom = configuredBackupRoot([
+    path.join(exeDir, "config"),
+    path.join(baseDir, "data", "config"),
+  ]);
+  const customBackupDir = custom && !isInside(custom, baseDir) ? custom : "";
+  // Read the ledger before deleting: once the folder is gone the newest backup can
+  // only be named, never offered back.
+  const newest = newestBackupFile(backupsDir);
+
   // Match on the folder we are deleting and on this exe, so a proxy started from
   // a source checkout is left running. The current process is excluded by pid.
   stopRelatedProcesses([baseDir, process.execPath], process.pid);
 
   const removed = [];
   const problems = [];
-  removeTree(baseDir, removed, problems);
+  if (keepBackups) {
+    for (const name of ["runtime", "data"]) {
+      const dir = path.join(baseDir, name);
+      if (fs.existsSync(dir)) removeTree(dir, removed, problems);
+    }
+  } else {
+    removeTree(baseDir, removed, problems);
+  }
 
   // A portable layout keeps settings and logs next to the exe.
   const logsDir = path.join(exeDir, "logs");
@@ -293,7 +369,7 @@ function uninstall(exeDir) {
 
   for (const dir of removed) console.log(`[uninstall] removed ${dir}`);
   for (const problem of problems) console.log(`[uninstall] could not remove ${problem}`);
-  reportEditorModels();
+  reportLeftovers(backupsDir, newest, keepBackups, customBackupDir);
   console.log(`[uninstall] delete ${process.execPath} to finish`);
 }
 
@@ -311,7 +387,7 @@ function main() {
   // Handle this before extracting anything: an uninstall should not recreate the
   // runtime folders it is about to delete.
   if (args.includes("--uninstall")) {
-    uninstall(exeDir);
+    uninstall(exeDir, args.includes("--keep-backups"));
     return;
   }
 

@@ -53,6 +53,11 @@ rem how many chatLanguageModels.json.bak-* backups to keep for each target file,
 rem recycled on every real write. set 0 or less to keep every backup forever
 set LM_BACKUP_KEEP=10
 
+rem where those backups live. one sub folder per target file, named after the
+rem editor directory plus a digest of the full path. leave empty for
+rem %LOCALAPPDATA%\ReasoningProxy\backups, which --uninstall deletes with the rest
+set LM_BACKUP_DIR=
+
 rem used only when the proxy is stopped, or before it has seen a VS Code request;
 rem otherwise the proxy reuses the Authorization header it already forwards
 set LM_API_KEY=

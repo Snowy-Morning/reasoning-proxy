@@ -31,6 +31,53 @@ function Split-LmEditorLabel([string]$Path) {
     return $Path
 }
 
+# Where a backup for $Path belongs. Writing it next to the editor's own config
+# would leave our litter in someone else's folder, so the default root is this
+# tool's own directory and --uninstall clears it with everything else. An empty
+# result means "nowhere better to go", and the caller keeps the old sibling copy.
+function Resolve-LmBackupDir {
+    param(
+        [string]$Path,
+        [string]$Root
+    )
+
+    if (-not $Root) {
+        if (-not $env:LOCALAPPDATA) {
+            return ''
+        }
+        $Root = Join-Path $env:LOCALAPPDATA 'ReasoningProxy\backups'
+    }
+
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path)
+    } catch {
+        $full = $Path
+    }
+
+    $label = [string](Split-LmEditorLabel $full)
+    if (-not $label -or $label -eq $full) {
+        $label = Split-Path -Leaf (Split-Path -Parent $full)
+    }
+    $label = (($label -replace '[^\w.-]', '_') -replace '^[._]+', '')
+    if (-not $label) {
+        $label = 'target'
+    }
+
+    # The digest keeps two installs that happen to share a folder name from writing
+    # into one pile, and doubles as the record of which targets were ever synced.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $digest = ([System.BitConverter]::ToString(
+            $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($full))
+        )).Replace('-', '').Substring(0, 8).ToLowerInvariant()
+        return [System.IO.Path]::GetFullPath((Join-Path $Root ($label + '-' + $digest)))
+    } catch {
+        return ''
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 # Union of every model id already configured in the given files, so the picker can
 # tell "would be added" apart from "already there".
 function Get-LmExistingIdSet {
@@ -206,13 +253,21 @@ function Write-LmJsonFile {
         [object]$Value,
         # Backup names carry a second resolution, so an unattended autosync can
         # otherwise leave one file per run forever. Zero or less keeps everything.
-        [int]$KeepBackups = 10
+        [int]$KeepBackups = 10,
+        # Empty selects the default root under %LOCALAPPDATA%\ReasoningProxy.
+        [string]$BackupRoot = ''
     )
 
     $json = ConvertTo-LmJson $Value
     $parent = Split-Path -Parent $Path
     if ($parent -and -not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    $fileName = [System.IO.Path]::GetFileName($Path)
+    $backupDir = Resolve-LmBackupDir -Path $Path -Root $BackupRoot
+    if (-not $backupDir) {
+        $backupDir = $parent
     }
 
     $backupPath = $null
@@ -223,7 +278,10 @@ function Write-LmJsonFile {
             $json += "`n"
         }
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        $backupPath = "$Path.bak-$stamp"
+        if ($backupDir -and -not (Test-Path -LiteralPath $backupDir)) {
+            New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+        }
+        $backupPath = Join-Path $backupDir ($fileName + '.bak-' + $stamp)
         Copy-Item -LiteralPath $Path -Destination $backupPath -Force
     } else {
         $json += "`n"
@@ -232,12 +290,12 @@ function Write-LmJsonFile {
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $json, $encoding)
 
-    if ($KeepBackups -gt 0 -and $parent -and (Test-Path -LiteralPath $parent)) {
-        # Match on this file's own prefix plus the exact stamp we write, so a folder
-        # holding several editors' configs never loses something that is not ours.
-        $prefix = [System.IO.Path]::GetFileName($Path) + '.bak-'
+    if ($KeepBackups -gt 0 -and $backupDir -and (Test-Path -LiteralPath $backupDir)) {
+        # Match on this file's own name plus the exact stamp we write, so a folder
+        # holding several targets never loses something that is not ours.
+        $prefix = $fileName + '.bak-'
         try {
-            $staleBackups = @(Get-ChildItem -LiteralPath $parent -File -Force |
+            $staleBackups = @(Get-ChildItem -LiteralPath $backupDir -File -Force |
                 Where-Object {
                     $_.Name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) -and
                     $_.Name.Substring($prefix.Length) -match '^\d{8}-\d{6}$'
@@ -1179,7 +1237,8 @@ function Sync-LmConfig {
         [bool]$Vision = $true,
         [string[]]$SkipPatterns = @(),
         [string[]]$IncludePatterns = @(),
-        [int]$KeepBackups = 10
+        [int]$KeepBackups = 10,
+        [string]$BackupRoot = ''
     )
 
     # Dot assignment on a plain hashtable flattens array values to a string, so
@@ -1276,7 +1335,7 @@ function Sync-LmConfig {
             # A prune that only deletes is still a change worth writing.
             $changed = ($addedList.Count -gt 0) -or ($updatedList.Count -gt 0) -or ($removedList.Count -gt 0)
             if ($changed -or $providers.Count -eq 0) {
-                $backupPath = Write-LmJsonFile -Path $path -Value $writtenProviders -KeepBackups $KeepBackups
+                $backupPath = Write-LmJsonFile -Path $path -Value $writtenProviders -KeepBackups $KeepBackups -BackupRoot $BackupRoot
                 $entry['Backup'] = $backupPath
                 $entry['Written'] = $true
             }
@@ -1359,6 +1418,7 @@ function Get-LmSyncSettings {
         TargetPort = Get-LmSetting $Config 'TARGET_PORT' '80'
         ConfigPath = Get-LmSetting $Config 'LM_CONFIG_PATH' ''
         KeepBackups = Get-LmIntSetting $Config 'LM_BACKUP_KEEP' 10
+        BackupRoot = Get-LmSetting $Config 'LM_BACKUP_DIR' ''
     }
 }
 
@@ -1410,7 +1470,8 @@ function Complete-LmSync {
         -Vision $settings['Vision'] `
         -SkipPatterns $settings['SkipPatterns'] `
         -IncludePatterns $settings['IncludePatterns'] `
-        -KeepBackups $settings['KeepBackups']
+        -KeepBackups $settings['KeepBackups'] `
+        -BackupRoot $settings['BackupRoot']
 
     $report['Ok'] = $true
     $report['Ids'] = $ids

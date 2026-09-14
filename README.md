@@ -216,7 +216,7 @@ set LM_MODEL_CONTEXT=claude=1M,gpt-6=1M,gpt=200K,kimi=256K
 
 按子串匹配，写在前面的优先，命中就用它，没命中的走 `LM_MAX_INPUT_TOKENS`。自动同步（`LM_AUTOSYNC=1`）同样吃这份配置。
 
-勾选的列表就是最终状态：点“同步”后，本代理那一组 provider 里没被勾选的模型会被删除，勾了的会按需新增或就地改字段，完全没动过的条目即使勾选也不会被重写，所以不会产生多余的备份。删除只发生在本代理自己的那一组里，别的 provider 一律不碰；如果界面识别不出哪一组属于本代理，就退化成只新增不删除。一个都没勾时直接拒绝执行，避免误清空。上游已经消失但仍被勾选的模型照常保留。每次真正写入前都会在同目录生成 `chatLanguageModels.json.bak-时间戳` 备份，完整记录写在 `logs\lm-sync.log`。
+勾选的列表就是最终状态：点“同步”后，本代理那一组 provider 里没被勾选的模型会被删除，勾了的会按需新增或就地改字段，完全没动过的条目即使勾选也不会被重写，所以不会产生多余的备份。删除只发生在本代理自己的那一组里，别的 provider 一律不碰；如果界面识别不出哪一组属于本代理，就退化成只新增不删除。一个都没勾时直接拒绝执行，避免误清空。上游已经消失但仍被勾选的模型照常保留。每次真正写入前都会先生成 `chatLanguageModels.json.bak-时间戳` 备份，备份放在本工具自己的目录而不是 VS Code 的用户目录，见 `LM_BACKUP_DIR`。完整记录写在 `logs\lm-sync.log`。
 
 自动同步（`LM_AUTOSYNC=1`）走的是另一套规则：它没有人帮忙确认，所以只追加、不删除，上游偶尔抽风也不会把已有配置清空。
 
@@ -246,6 +246,7 @@ set LM_MODEL_CONTEXT=claude=1M,gpt-6=1M,gpt=200K,kimi=256K
 | `LM_SKIP_MODELS` | 模型 id 命中这些子串时在选择窗口里标为 `已过滤`，不可勾选 | `embedding,rerank,...` |
 | `LM_INCLUDE_MODELS` | 非空时只有命中这些子串的模型可勾选 | 空 |
 | `LM_BACKUP_KEEP` | 每个目标文件保留多少个 `chatLanguageModels.json.bak-*`，真正写入之后回收超出的部分；设为 `0` 或负数则全部保留 | `10` |
+| `LM_BACKUP_DIR` | 上述备份的根目录，每个目标文件在里面占一个子文件夹。留空用 `%LOCALAPPDATA%\ReasoningProxy\backups`，该目录会随 `--uninstall` 一起删除 | 空 |
 | `LM_API_KEY` | 直连上游时使用的密钥 | 空 |
 | `LM_AUTOSYNC` | 设为 `1` 时，代理捕获到 VS Code 请求后自动同步一次，不弹选择窗口 | `0` |
 
@@ -367,10 +368,12 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 执行 `ReasoningProxy.exe --uninstall`，它会：
 
 1. 结束仍在运行的本工具进程（图形界面和后台代理）。只匹配本程序的 exe 路径与它自己的数据目录，从源码目录里起的代理不会被波及。
-2. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录和备用 `data` 目录。
+2. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
 3. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
 4. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
 
-VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。命令会顺带打印该目录下最近一个 `chatLanguageModels.json.bak-*` 的路径，需要回滚时用它的名字找即可。
+VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认也在这个目录里，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
+
+想找回某次同步之前的配置，到 `<备份目录>\<编辑器目录名>-<路径摘要>\` 里按文件名里的时间戳挑一个，把内容复制回 `chatLanguageModels.json` 即可。
 
 源码模式不需要卸载，删除项目目录就行。
