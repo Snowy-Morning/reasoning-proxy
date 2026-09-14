@@ -38,7 +38,16 @@ Write-Host "[build] setting exe icon..."
 $iconPath = Join-Path $repoRoot "assets\logo.ico"
 $toolDir = Join-Path $env:TEMP "reasoning-proxy-build-resedit"
 $toolModules = Join-Path $toolDir "node_modules"
-if (-not (Test-Path (Join-Path $toolModules "resedit"))) {
+# A half-cleaned cache can leave the package folders present but empty, so check
+# the exact files set-exe-icon.mjs imports and reinstall from scratch if any is
+# missing rather than failing near the end of the build.
+$neededModuleFiles = @(
+    (Join-Path $toolModules "resedit\package.json"),
+    (Join-Path $toolModules "resedit\dist\index.js"),
+    (Join-Path $toolModules "pe-library\dist\index.js")
+)
+if (@($neededModuleFiles | Where-Object { -not (Test-Path $_) }).Count -gt 0) {
+    Remove-Item $toolDir -Recurse -Force -ErrorAction SilentlyContinue
     npm install --prefix $toolDir resedit --no-audit --no-fund --silent
     if ($LASTEXITCODE -ne 0) {
         throw "npm install resedit failed with exit code $LASTEXITCODE"
