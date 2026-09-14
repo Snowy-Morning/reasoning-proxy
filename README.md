@@ -244,6 +244,7 @@ set LM_MODEL_CONTEXT=claude=1M,gpt-6=1M,gpt=200K,kimi=256K
 | `LM_MODEL_CONTEXT` | 按模型族预填表格里的上下文窗口，首个命中的子串生效 | 空 |
 | `LM_SKIP_MODELS` | 模型 id 命中这些子串时在选择窗口里标为 `已过滤`，不可勾选 | `embedding,rerank,...` |
 | `LM_INCLUDE_MODELS` | 非空时只有命中这些子串的模型可勾选 | 空 |
+| `LM_BACKUP_KEEP` | 每个目标文件保留多少个 `chatLanguageModels.json.bak-*`，真正写入之后回收超出的部分；设为 `0` 或负数则全部保留 | `10` |
 | `LM_API_KEY` | 直连上游时使用的密钥 | 空 |
 | `LM_AUTOSYNC` | 设为 `1` 时，代理捕获到 VS Code 请求后自动同步一次，不弹选择窗口 | `0` |
 

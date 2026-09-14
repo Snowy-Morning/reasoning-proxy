@@ -203,7 +203,10 @@ function Get-LmFlatArray([object]$Value) {
 function Write-LmJsonFile {
     param(
         [string]$Path,
-        [object]$Value
+        [object]$Value,
+        # Backup names carry a second resolution, so an unattended autosync can
+        # otherwise leave one file per run forever. Zero or less keeps everything.
+        [int]$KeepBackups = 10
     )
 
     $json = ConvertTo-LmJson $Value
@@ -228,6 +231,25 @@ function Write-LmJsonFile {
 
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $json, $encoding)
+
+    if ($KeepBackups -gt 0 -and $parent -and (Test-Path -LiteralPath $parent)) {
+        # Match on this file's own prefix plus the exact stamp we write, so a folder
+        # holding several editors' configs never loses something that is not ours.
+        $prefix = [System.IO.Path]::GetFileName($Path) + '.bak-'
+        try {
+            $staleBackups = @(Get-ChildItem -LiteralPath $parent -File -Force |
+                Where-Object {
+                    $_.Name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) -and
+                    $_.Name.Substring($prefix.Length) -match '^\d{8}-\d{6}$'
+                } |
+                Sort-Object Name -Descending |
+                Select-Object -Skip $KeepBackups)
+            foreach ($old in $staleBackups) {
+                try { Remove-Item -LiteralPath $old.FullName -Force -ErrorAction Stop } catch {}
+            }
+        } catch {}
+    }
+
     return $backupPath
 }
 
@@ -1156,7 +1178,8 @@ function Sync-LmConfig {
         [bool]$ToolCalling = $true,
         [bool]$Vision = $true,
         [string[]]$SkipPatterns = @(),
-        [string[]]$IncludePatterns = @()
+        [string[]]$IncludePatterns = @(),
+        [int]$KeepBackups = 10
     )
 
     # Dot assignment on a plain hashtable flattens array values to a string, so
@@ -1253,7 +1276,7 @@ function Sync-LmConfig {
             # A prune that only deletes is still a change worth writing.
             $changed = ($addedList.Count -gt 0) -or ($updatedList.Count -gt 0) -or ($removedList.Count -gt 0)
             if ($changed -or $providers.Count -eq 0) {
-                $backupPath = Write-LmJsonFile -Path $path -Value $writtenProviders
+                $backupPath = Write-LmJsonFile -Path $path -Value $writtenProviders -KeepBackups $KeepBackups
                 $entry['Backup'] = $backupPath
                 $entry['Written'] = $true
             }
@@ -1335,6 +1358,7 @@ function Get-LmSyncSettings {
         TargetHost = Get-LmSetting $Config 'TARGET_HOST' ''
         TargetPort = Get-LmSetting $Config 'TARGET_PORT' '80'
         ConfigPath = Get-LmSetting $Config 'LM_CONFIG_PATH' ''
+        KeepBackups = Get-LmIntSetting $Config 'LM_BACKUP_KEEP' 10
     }
 }
 
@@ -1385,7 +1409,8 @@ function Complete-LmSync {
         -ToolCalling $settings['ToolCalling'] `
         -Vision $settings['Vision'] `
         -SkipPatterns $settings['SkipPatterns'] `
-        -IncludePatterns $settings['IncludePatterns']
+        -IncludePatterns $settings['IncludePatterns'] `
+        -KeepBackups $settings['KeepBackups']
 
     $report['Ok'] = $true
     $report['Ids'] = $ids
