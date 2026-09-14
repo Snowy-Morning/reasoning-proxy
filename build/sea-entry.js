@@ -8,6 +8,7 @@ const sea = require("node:sea");
 const ASSET_NAMES = [
   "scripts/proxy.js",
   "scripts/proxy-gui.ps1",
+  "scripts/language-models.ps1",
   "scripts/start.bat",
   "scripts/start-background.ps1",
   "scripts/gui.vbs",
