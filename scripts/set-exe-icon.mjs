@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const [exePath, iconPath, modulesDir, version = "1.2.5"] = process.argv.slice(2);
+const [exePath, iconPath, modulesDir, version = "1.0.0"] = process.argv.slice(2);
 if (!exePath || !iconPath || !modulesDir) {
   console.error("usage: node scripts/set-exe-icon.mjs <exe> <ico> <node_modules-dir> [version]");
   process.exit(1);
