@@ -386,10 +386,11 @@ function reportLeftovers(backupsDir, newest, keepBackups, customDir) {
   }
 }
 
-// LM_BACKUP_DIR can point outside the tree we remove. Uninstall never chases it:
-// deleting a path somebody typed by hand is a bigger risk than leaving a clearly
-// named folder in place, so the leftover is reported and the user decides.
-function configuredBackupRoot(configDirs) {
+// Read a `set KEY=value` line out of config.bat, expanding %VARS% the way cmd
+// would. LM_BACKUP_DIR can point outside the tree we remove, and uninstall never
+// chases it: deleting a path somebody typed by hand is a bigger risk than leaving
+// a clearly named folder behind, so that one is only reported.
+function configuredSetting(configDirs, key) {
   for (const dir of configDirs) {
     let text;
     try {
@@ -397,13 +398,55 @@ function configuredBackupRoot(configDirs) {
     } catch {
       continue;
     }
-    const match = /^[ \t]*set[ \t]+LM_BACKUP_DIR=(.*)$/im.exec(text);
+    const match = new RegExp("^[ \\t]*set[ \\t]+" + key + "=(.*)$", "im").exec(text);
     if (!match) continue;
     const value = match[1].replace(/["']/g, "").trim();
     if (!value) return "";
     return value.replace(/%([^%]+)%/g, (all, name) => process.env[name] || all);
   }
   return "";
+}
+
+// Mirrors Select-LmTargetPaths in language-models.ps1: one file, and an explicit
+// LM_CONFIG_PATH wins over the default VS Code location.
+function editorTargetPath(configDirs) {
+  const configured = configuredSetting(configDirs, "LM_CONFIG_PATH");
+  if (configured) return path.resolve(configured);
+  const appData = process.env.APPDATA;
+  if (!appData) return "";
+  return path.join(appData, "Code", "User", "chatLanguageModels.json");
+}
+
+// Backups written next to the editor's own file by builds from before the move.
+// Reaching into that folder is normally off limits, so the reach is narrowed to
+// this exact file name plus the exact stamp format: nothing else in there can be
+// matched, and the live chatLanguageModels.json is never a candidate.
+function listStrayBackups(targetPath) {
+  const dir = path.dirname(targetPath);
+  const prefix = path.basename(targetPath) + ".bak-";
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((name) => name.startsWith(prefix) && BACKUP_STAMP_RE.test(name))
+    .map((name) => path.join(dir, name));
+}
+
+function sweepStrayBackups(targetPath) {
+  let removed = 0;
+  const problems = [];
+  for (const file of listStrayBackups(targetPath)) {
+    try {
+      fs.rmSync(file, { force: true, maxRetries: 2, retryDelay: 50 });
+      removed += 1;
+    } catch (err) {
+      problems.push(`${file} (${err.message})`);
+    }
+  }
+  return { removed, problems };
 }
 
 function isInside(child, parent) {
@@ -417,11 +460,14 @@ function isInside(child, parent) {
 function uninstall(exeDir, keepBackups) {
   const baseDir = path.join(appDataDir(), "ReasoningProxy");
   const backupsDir = path.join(baseDir, "backups");
-  const custom = configuredBackupRoot([
+  // Read the settings before any of these folders are deleted.
+  const configDirs = [
     path.join(exeDir, "config"),
     path.join(baseDir, "data", "config"),
-  ]);
+  ];
+  const custom = configuredSetting(configDirs, "LM_BACKUP_DIR");
   const customBackupDir = custom && !isInside(custom, baseDir) ? custom : "";
+  const editorTarget = editorTargetPath(configDirs);
   // Read the ledger before deleting: once the folder is gone the newest backup can
   // only be named, never offered back.
   const newest = newestBackupFile(backupsDir);
@@ -450,8 +496,21 @@ function uninstall(exeDir, keepBackups) {
   const configDir = path.join(exeDir, "config");
   if (ownsConfigDir(configDir)) removeTree(configDir, removed, problems);
 
+  let strays = { removed: 0, problems: [] };
+  if (editorTarget && !keepBackups) {
+    strays = sweepStrayBackups(editorTarget);
+    problems.push(...strays.problems);
+  }
+
   for (const dir of removed) console.log(`[uninstall] removed ${dir}`);
   for (const problem of problems) console.log(`[uninstall] could not remove ${problem}`);
+  if (strays.removed > 0) {
+    console.log(`[uninstall] removed ${strays.removed} stray backup(s) next to ${editorTarget}`);
+  }
+  if (keepBackups && editorTarget) {
+    const left = listStrayBackups(editorTarget).length;
+    if (left > 0) console.log(`[uninstall] kept ${left} stray backup(s) next to ${editorTarget}`);
+  }
   if (arp === "removed") console.log("[uninstall] removed the Settings > Apps entry");
   if (arp === "failed") console.log("[uninstall] could not remove the Settings > Apps entry");
   reportLeftovers(backupsDir, newest, keepBackups, customBackupDir);

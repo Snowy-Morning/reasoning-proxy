@@ -374,9 +374,10 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 2. 从「设置 → 应用」的卸载登记表里删掉自己，列表里不会再留下点不动的条目。
 3. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
 4. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
-5. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
+5. 清掉目标配置文件旁边的遗留备份，也就是备份搬家之前直接写在 VS Code 用户目录里的那些。这里的判定收得很紧：文件名必须是 `<目标文件名>.bak-yyyymmdd-HHMMSS` 这个完整格式，`chatLanguageModels.json.bak-legacy`、`settings.json.bak-20260101-000000` 这类都对不上，不会被误删。
+6. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
 
-VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认也在这个目录里，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
+VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认在 `%LOCALAPPDATA%\ReasoningProxy\backups`，属于第 3 步，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`，第 5 步的遗留备份也会原样留着并报告有几个。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
 
 想找回某次同步之前的配置，到 `<备份目录>\<编辑器目录名>-<路径摘要>\` 里按文件名里的时间戳挑一个，把内容复制回 `chatLanguageModels.json` 即可。
 
