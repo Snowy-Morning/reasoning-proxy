@@ -248,7 +248,12 @@ function registerAddRemovePrograms(exeDir) {
   const changed = Object.keys(wanted).filter((name) => current[name] !== wanted[name]);
   for (const name of changed) {
     const type = ARP_DWORDS.has(name) ? "REG_DWORD" : "REG_SZ";
-    if (reg(["add", ARP_KEY, "/v", name, "/t", type, "/d", wanted[name], "/f"]).status !== 0) {
+    const result = reg(["add", ARP_KEY, "/v", name, "/t", type, "/d", wanted[name], "/f"]);
+    if (result.status !== 0) {
+      // Saying nothing here is how a missing entry becomes undiagnosable: the app
+      // runs fine, only the uninstall button is gone.
+      const detail = String(result.stderr || result.stdout || "").trim();
+      console.log(`[sea] could not register in Settings > Apps (${name}: ${detail || `reg.exe exit ${result.status}`})`);
       return;
     }
   }
