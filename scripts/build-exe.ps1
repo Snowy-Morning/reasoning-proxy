@@ -1,6 +1,6 @@
 param(
     [string]$OutputName = "ReasoningProxy.exe",
-    [string]$Version = "1.2.3"
+    [string]$Version = "1.2.4"
 )
 
 $ErrorActionPreference = "Stop"
