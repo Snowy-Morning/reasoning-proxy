@@ -182,6 +182,86 @@ function startGui(runtime, dataDir) {
   }
 }
 
+// A portable exe has no installer, so Windows has nothing to list under
+// Settings > Apps. The first run writes the key itself and --uninstall takes it
+// away, which is what gives the user a visible uninstall button instead of having
+// to know the flag exists.
+// Every value stays ASCII on purpose: reg.exe prints what it wrote in the active
+// console codepage, so a Chinese name would come back garbled and force a rewrite
+// on every start.
+const ARP_KEY =
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ReasoningProxy";
+const ARP_DWORDS = new Set(["EstimatedSize", "NoModify", "NoRepair"]);
+
+function appVersion() {
+  try {
+    const config = sea.getConfig();
+    return (config && config.version) || "0.0.0";
+  } catch {
+    // Running from source, or an older blob without a config section.
+    return "0.0.0";
+  }
+}
+
+function reg(args) {
+  return spawnSync("reg.exe", args, { windowsHide: true, encoding: "utf8" });
+}
+
+function installedEntries() {
+  const result = reg(["query", ARP_KEY]);
+  if (result.status !== 0) return {};
+  const values = {};
+  for (const line of String(result.stdout).split(/\r?\n/)) {
+    const match = /^\s+(\S+)\s+REG_(SZ|EXPAND_SZ|DWORD)\s+(.*?)\s*$/.exec(line);
+    if (!match) continue;
+    values[match[1]] =
+      match[2] === "DWORD" ? String(parseInt(match[3], 16)) : match[3];
+  }
+  return values;
+}
+
+function wantedEntries(exeDir) {
+  const uninstall = `"${process.execPath}" --uninstall`;
+  const entries = {
+    DisplayName: "Reasoning Proxy",
+    DisplayVersion: appVersion(),
+    Publisher: "Snowy-Morning",
+    InstallLocation: exeDir,
+    DisplayIcon: process.execPath,
+    UninstallString: uninstall,
+    QuietUninstallString: uninstall,
+    NoModify: "1",
+    NoRepair: "1",
+  };
+  try {
+    // Settings expects kilobytes, not bytes.
+    entries.EstimatedSize = String(
+      Math.max(1, Math.round(fs.statSync(process.execPath).size / 1024))
+    );
+  } catch {}
+  return entries;
+}
+
+function registerAddRemovePrograms(exeDir) {
+  const wanted = wantedEntries(exeDir);
+  const current = installedEntries();
+  const changed = Object.keys(wanted).filter((name) => current[name] !== wanted[name]);
+  for (const name of changed) {
+    const type = ARP_DWORDS.has(name) ? "REG_DWORD" : "REG_SZ";
+    if (reg(["add", ARP_KEY, "/v", name, "/t", type, "/d", wanted[name], "/f"]).status !== 0) {
+      return;
+    }
+  }
+  if (changed.length > 0) {
+    console.log(`[sea] listed in Settings > Apps (${changed.length} value(s) written)`);
+  }
+}
+
+function unregisterAddRemovePrograms() {
+  if (reg(["query", ARP_KEY]).status !== 0) return "none";
+  return reg(["delete", ARP_KEY, "/f"]).status === 0 ? "removed" : "failed";
+}
+
 // ReasoningProxy.exe --uninstall stops the app's own processes and deletes the
 // folders it created. VS Code's chatLanguageModels.json is deliberately kept:
 // it can hold providers this tool never touched, so reverting it is a human call.
@@ -350,6 +430,9 @@ function uninstall(exeDir, keepBackups) {
   // a source checkout is left running. The current process is excluded by pid.
   stopRelatedProcesses([baseDir, process.execPath], process.pid);
 
+  // Drop the Settings > Apps entry before the files it points at disappear.
+  const arp = unregisterAddRemovePrograms();
+
   const removed = [];
   const problems = [];
   if (keepBackups) {
@@ -369,6 +452,8 @@ function uninstall(exeDir, keepBackups) {
 
   for (const dir of removed) console.log(`[uninstall] removed ${dir}`);
   for (const problem of problems) console.log(`[uninstall] could not remove ${problem}`);
+  if (arp === "removed") console.log("[uninstall] removed the Settings > Apps entry");
+  if (arp === "failed") console.log("[uninstall] could not remove the Settings > Apps entry");
   reportLeftovers(backupsDir, newest, keepBackups, customBackupDir);
   console.log(`[uninstall] delete ${process.execPath} to finish`);
 }
@@ -397,6 +482,17 @@ function main() {
     process.env.REASONING_PROXY_DIR || (proxyMode ? exeDir : chooseDataDir(exeDir));
 
   ensureDefaultData(runtime, dataDir);
+
+  if (dataDir === exeDir) {
+    // The portable layout keeps the exe where the user put it, which is the path
+    // Windows should offer to uninstall. A redirected data dir says nothing about
+    // where the exe lives, so only the portable case registers.
+    try {
+      registerAddRemovePrograms(exeDir);
+    } catch (err) {
+      console.log(`[sea] could not register in Settings > Apps: ${err.message}`);
+    }
+  }
 
   if (proxyMode) {
     runProxy(runtime, dataDir);

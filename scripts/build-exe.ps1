@@ -8,6 +8,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $repoRoot "build"
 $distDir = Join-Path $repoRoot "dist"
 $blobPath = Join-Path $buildDir "sea-prep.blob"
+$seaConfigPath = Join-Path $buildDir "sea-config.generated.json"
 $outExe = Join-Path $distDir $OutputName
 $sentinelFuse = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
 
@@ -19,7 +20,14 @@ if (Test-Path $distDir) {
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
 Write-Host "[build] creating SEA blob..."
-node --experimental-sea-config sea-config.json
+# The packaged exe needs its own version at runtime to register itself under
+# Settings > Apps, and Node only exposes build-time data through the SEA config.
+# Stamp it into a generated copy so sea-config.json stays version neutral.
+$seaConfig = Get-Content (Join-Path $repoRoot "sea-config.json") -Raw | ConvertFrom-Json
+$seaConfig.config.version = $Version
+# Depth 2 is the PowerShell default and would flatten the nested asset map.
+$seaConfig | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $seaConfigPath -Encoding ASCII
+node --experimental-sea-config $seaConfigPath
 if ($LASTEXITCODE -ne 0) {
     throw "Node SEA config failed with exit code $LASTEXITCODE"
 }
@@ -61,6 +69,9 @@ if ($LASTEXITCODE -ne 0) {
 
 if (Test-Path $blobPath) {
     Remove-Item $blobPath -Force
+}
+if (Test-Path $seaConfigPath) {
+    Remove-Item $seaConfigPath -Force
 }
 
 Write-Host "[build] done: $outExe"

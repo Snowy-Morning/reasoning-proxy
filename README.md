@@ -136,6 +136,7 @@ dist\ReasoningProxy.exe
 - 双击 `ReasoningProxy.exe`：打开图形界面。
 - 执行 `ReasoningProxy.exe --proxy`：后台代理模式。
 - 执行 `ReasoningProxy.exe --uninstall`：清理本工具生成的运行文件，见「卸载」。
+- 打包版启动时会把自己登记到 Windows 的「设置 → 应用」里，在那里能看到「Reasoning Proxy」和它的卸载按钮；不想用命令行时从那里卸。
 - 打包版第一次启动可能出现一次黑色控制台闪烁，这是 Node SEA 控制台程序的限制；代理进程本身可以隐藏窗口运行。
 - 打包前请关闭正在运行的 `ReasoningProxy.exe`，否则旧的 `dist` 目录可能被占用。
 
@@ -216,7 +217,7 @@ set LM_MODEL_CONTEXT=claude=1M,gpt-6=1M,gpt=200K,kimi=256K
 
 按子串匹配，写在前面的优先，命中就用它，没命中的走 `LM_MAX_INPUT_TOKENS`。自动同步（`LM_AUTOSYNC=1`）同样吃这份配置。
 
-勾选的列表就是最终状态：点“同步”后，本代理那一组 provider 里没被勾选的模型会被删除，勾了的会按需新增或就地改字段，完全没动过的条目即使勾选也不会被重写，所以不会产生多余的备份。删除只发生在本代理自己的那一组里，别的 provider 一律不碰；如果界面识别不出哪一组属于本代理，就退化成只新增不删除。一个都没勾时直接拒绝执行，避免误清空。上游已经消失但仍被勾选的模型照常保留。每次真正写入前都会先生成 `chatLanguageModels.json.bak-时间戳` 备份，备份放在本工具自己的目录而不是 VS Code 的用户目录，见 `LM_BACKUP_DIR`；早先版本留在编辑器目录里的那些备份会在下一次真正写入时搬过去，名字对不上的文件一律不碰。完整记录写在 `logs\lm-sync.log`。
+勾选的列表就是最终状态：点“同步”后，本代理那一组 provider 里没被勾选的模型会被删除，勾了的会按需新增或就地改字段，完全没动过的条目即使勾选也不会被重写，所以不会产生多余的备份。删除只发生在本代理自己的那一组里，别的 provider 一律不碰；如果界面识别不出哪一组属于本代理，就退化成只新增不删除。一个都没勾时直接拒绝执行，避免误清空。上游已经消失但仍被勾选的模型照常保留。每次真正写入前都会先生成 `chatLanguageModels.json.bak-时间戳` 备份，备份放在本工具自己的目录而不是 VS Code 的用户目录，见 `LM_BACKUP_DIR`；早先版本留在编辑器目录里的那些备份会在下一次真正写入时搬过去，名字对不上的文件一律不碰。备份不在 exe 旁边，某一次同步具体写到了哪里，看 `logs\lm-sync.log`，每个目标一行，字段 `Backup` 就是路径。
 
 自动同步（`LM_AUTOSYNC=1`）走的是另一套规则：它没有人帮忙确认，所以只追加、不删除，上游偶尔抽风也不会把已有配置清空。
 
@@ -365,12 +366,15 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 
 ## 卸载
 
-执行 `ReasoningProxy.exe --uninstall`，它会：
+打包版每次启动会把自己写进 `HKEY_CURRENT_USER` 的卸载登记表，所以在「设置 → 应用 → 安装的应用」里能看到 **Reasoning Proxy** 和一个「卸载」按钮，点它就是执行下面这条命令。
+
+也可以直接执行 `ReasoningProxy.exe --uninstall`，它会：
 
 1. 结束仍在运行的本工具进程（图形界面和后台代理）。只匹配本程序的 exe 路径与它自己的数据目录，从源码目录里起的代理不会被波及。
-2. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
-3. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
-4. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
+2. 从「设置 → 应用」的卸载登记表里删掉自己，列表里不会再留下点不动的条目。
+3. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
+4. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
+5. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
 
 VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认也在这个目录里，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
 
