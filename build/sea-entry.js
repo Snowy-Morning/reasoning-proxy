@@ -195,10 +195,10 @@ const ARP_DWORDS = new Set(["EstimatedSize", "NoModify", "NoRepair"]);
 
 function appVersion() {
   try {
-    const config = sea.getConfig();
-    return (config && config.version) || "0.0.0";
+    // The build adds a "version" asset; source runs and older blobs have none.
+    const text = getAssetBuffer("version").toString("utf8").trim();
+    return text || "0.0.0";
   } catch {
-    // Running from source, or an older blob without a config section.
     return "0.0.0";
   }
 }
