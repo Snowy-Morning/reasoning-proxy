@@ -556,57 +556,99 @@ function isInside(child, parent) {
 }
 
 // Windows keeps the image of a running exe locked, so this process cannot delete the
-// file that is running it. The last step goes to a batch helper written in %TEMP% and
-// launched detached: cmd.exe is happy without a console (powershell.exe is not, it
-// exits 0 having done nothing), and a detached cmd outlives the process that started
-// it, which is exactly the moment the lock disappears.
-// Nothing here reaches for /s: rmdir only succeeds when the folder is already empty,
-// so a directory with somebody else's files in it is left standing.
-function purgeBatText(exePath, exeDir) {
-  // %% is how a batch file spells a literal percent sign in its own source.
-  const bat = (value) => String(value).replace(/%/g, "%%");
+// file that is running it. The last step goes to a helper written in %TEMP% and
+// launched detached, which waits for this process to disappear and then removes the
+// exe, and the folder behind it only if it is empty by then.
+//
+// The helper is VBScript, not a batch file, because of how it has to wait. A detached
+// process gets no console, and a batch file's only sleep is ping.exe: every call would
+// be handed a brand new terminal window, so an uninstall that had to retry showed the
+// user a stack of windows titled "ping -n 2 127.0.0.1". WScript.Sleep is built into the
+// script host, and wscript.exe is a windowless host to begin with. The app already ships
+// gui.vbs, so this adds no new dependency; where wscript is missing the uninstall says so
+// instead of pretending the exe is on its way out.
+//
+// DeleteFolder is never used on a folder that still has anything in it. Its second
+// argument is force, not recursion, and the method deletes contents along with the
+// folder, so emptiness is counted here first and the folder is only dropped once it is
+// truly down to nothing.
+//
+// Paths travel through the environment rather than the script text, so nothing here has
+// to survive another layer of quoting.
+function purgeScriptText() {
   return (
     [
-      "@echo off",
-      "rem ReasoningProxy purge helper, written by ReasoningProxy.exe",
-      "setlocal",
-      `set "EXE=${bat(exePath)}"`,
-      `set "DIR=${bat(exeDir)}"`,
-      "for /L %%N in (1,1,120) do (",
-      "  ping -n 2 127.0.0.1 >nul",
-      '  del /f /q "%EXE%" >nul 2>&1',
-      '  if not exist "%EXE%" goto dropdir',
-      ")",
-      ":dropdir",
-      "for /L %%N in (1,1,20) do (",
-      '  rmdir "%DIR%" >nul 2>&1',
-      '  if not exist "%DIR%" goto finish',
-      "  ping -n 2 127.0.0.1 >nul",
-      ")",
-      ":finish",
-      'del "%~f0" >nul 2>&1',
+      "' ReasoningProxy purge helper, written by ReasoningProxy.exe",
+      "Dim shell, fso, env, exe, dir, i, target",
+      'Set shell = CreateObject("WScript.Shell")',
+      'Set fso = CreateObject("Scripting.FileSystemObject")',
+      'Set env = shell.Environment("PROCESS")',
+      "exe = env(\"RP_PURGE_EXE\")",
+      "dir = env(\"RP_PURGE_DIR\")",
+      "",
+      "If exe <> \"\" Then",
+      "  For i = 1 To 240",
+      "    WScript.Sleep 250",
+      "    On Error Resume Next",
+      "    Err.Clear",
+      "    fso.DeleteFile exe, True",
+      "    If Err.Number = 0 Then Exit For",
+      "    On Error GoTo 0",
+      "  Next",
+      "End If",
+      "",
+      "' The folder goes only when it holds nothing of anybody else's. It may still be",
+      "' holding the uninstall script that launched this run, so this is retried.",
+      "If dir <> \"\" Then",
+      "  For i = 1 To 40",
+      "    If Not fso.FolderExists(dir) Then Exit For",
+      "    Set target = fso.GetFolder(dir)",
+      "    If target.Files.Count = 0 And target.SubFolders.Count = 0 Then",
+      "      On Error Resume Next",
+      "      Err.Clear",
+      "      fso.DeleteFolder dir, True",
+      "      If Err.Number = 0 Then Exit For",
+      "      On Error GoTo 0",
+      "    End If",
+      "    WScript.Sleep 250",
+      "  Next",
+      "End If",
+      "",
+      "On Error Resume Next",
+      "fso.DeleteFile WScript.ScriptFullName, True",
       "",
     ].join("\r\n")
   );
 }
 
 function scheduleExeRemoval(exeDir) {
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  if (!fs.existsSync(path.join(systemRoot, "System32", "wscript.exe"))) {
+    console.log("[uninstall] wscript.exe is not available, so the exe stays");
+    console.log(`[uninstall] delete ${process.execPath} by hand to finish`);
+    return;
+  }
   const helper = path.join(
     os.tmpdir(),
-    `reasoning-proxy-purge-${process.pid}-${crypto.randomBytes(4).toString("hex")}.bat`
+    `reasoning-proxy-purge-${process.pid}-${crypto.randomBytes(4).toString("hex")}.vbs`
   );
   try {
-    fs.writeFileSync(helper, purgeBatText(process.execPath, exeDir));
+    fs.writeFileSync(helper, purgeScriptText());
   } catch (err) {
     console.log(`[uninstall] could not write the removal helper: ${err.message}`);
     console.log(`[uninstall] delete ${process.execPath} by hand to finish`);
     return;
   }
   try {
-    const child = spawn("cmd.exe", ["/c", helper], {
+    const child = spawn("wscript.exe", ["//B", "//Nologo", helper], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
+      env: {
+        ...process.env,
+        RP_PURGE_EXE: process.execPath,
+        RP_PURGE_DIR: exeDir,
+      },
     });
     // Without a listener a spawn failure would surface as an unhandled error event
     // and crash the run that is already reporting success.
