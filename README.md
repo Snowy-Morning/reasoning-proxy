@@ -112,7 +112,7 @@ reasoning-proxy/
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-exe.ps1
 ```
 
-默认版本号为 `1.2.2`。需要自定义版本时传入 `-Version`：
+默认版本号为 `1.2.3`。需要自定义版本时传入 `-Version`：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-exe.ps1 -Version "1.0.1"
@@ -136,6 +136,7 @@ dist\ReasoningProxy.exe
 - 双击 `ReasoningProxy.exe`：打开图形界面。
 - 执行 `ReasoningProxy.exe --proxy`：后台代理模式。
 - 执行 `ReasoningProxy.exe --uninstall`：清理本工具生成的运行文件，见「卸载」。
+- 双击 `uninstall.bat`：带确认的完整卸载，连 `ReasoningProxy.exe` 一起删掉，见「卸载」。这个脚本由打包版第一次启动时生成在 exe 旁边。
 - 打包版启动时会把自己登记到 Windows 的「设置 → 应用」里，在那里能看到「Reasoning Proxy」和它的卸载按钮；不想用命令行时从那里卸。
 - 打包版第一次启动可能出现一次黑色控制台闪烁，这是 Node SEA 控制台程序的限制；代理进程本身可以隐藏窗口运行。
 - 打包前请关闭正在运行的 `ReasoningProxy.exe`，否则旧的 `dist` 目录可能被占用。
@@ -366,16 +367,20 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 
 ## 卸载
 
-打包版每次启动会把自己写进 `HKEY_CURRENT_USER` 的卸载登记表，所以在「设置 → 应用 → 安装的应用」里能看到 **Reasoning Proxy** 和一个「卸载」按钮，点它就是执行下面这条命令。
+单文件 portable 没有安装程序，所以不会有传统的 `uninstall.exe`。可用的卸载入口有三个，做的是同一件事：
 
-也可以直接执行 `ReasoningProxy.exe --uninstall`，它会：
+- 双击 exe 旁边的 `uninstall.bat`：先把要删的东西列出来，等你确认。这个脚本由打包版第一次启动时生成，手工删掉它不影响另外两个入口。
+- 「设置 → 应用 → 安装的应用」里的 **Reasoning Proxy**，点「卸载」。打包版每次启动会把自己写进 `HKEY_CURRENT_USER` 的卸载登记表，登记表里的命令就是下面第三条。
+- 命令行 `ReasoningProxy.exe --uninstall --purge`。只写 `--uninstall` 时 `ReasoningProxy.exe` 本身会留着，适合只想清掉运行文件、回头继续用的情况。
+
+它会：
 
 1. 结束仍在运行的本工具进程（图形界面和后台代理）。只匹配本程序的 exe 路径与它自己的数据目录，从源码目录里起的代理不会被波及。
 2. 从「设置 → 应用」的卸载登记表里删掉自己，列表里不会再留下点不动的条目。
 3. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
-4. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。这两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。
+4. 删除 exe 旁边属于 portable 用法的 `logs\`、`config\` 和 `uninstall.bat`。前两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，或者它留下的归属标记 `.reasoning-proxy`；`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。只打开过图形界面、代理没跑起来时 `logs\` 会是空的，这时只有同目录的 `config.bat` 确实属于本工具才删，免得碰了别人建的空文件夹。`uninstall.bat` 同样只认自己生成的那一份，手写的同名脚本原样留着；它正在运行着这次卸载时也不删，免得打断逐行读它的 cmd，那种情况由脚本自己的最后一行收尾。
 5. 清掉目标配置文件旁边的遗留备份，也就是备份搬家之前直接写在 VS Code 用户目录里的那些。这里的判定收得很紧：文件名必须是 `<目标文件名>.bak-yyyymmdd-HHMMSS` 这个完整格式，`chatLanguageModels.json.bak-legacy`、`settings.json.bak-20260101-000000` 这类都对不上，不会被误删。
-6. 打印处理结果，并提示你手动删除 `ReasoningProxy.exe`。进程无法删除正在运行的自己，这一步留给你。
+6. 打印处理结果。带 `--purge` 时还会往 `%TEMP%` 写一个几行的清理脚本并把它独立拉起：进程删不掉正在运行的自己，所以由它在 `ReasoningProxy.exe` 退出之后把 exe 删掉，接着如果 exe 所在的文件夹已经空了就把文件夹也删掉，里面还有别的文件就原样放着。这个清理脚本办完事把自己也删了，不会留在 `%TEMP%` 里。
 
 VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认在 `%LOCALAPPDATA%\ReasoningProxy\backups`，属于第 3 步，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`，第 5 步的遗留备份也会原样留着并报告有几个。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
 

@@ -188,6 +188,9 @@ function enableFileLogging() {
   const logsDir = path.join(ROOT_DIR, "logs");
   try {
     fs.mkdirSync(logsDir, { recursive: true });
+    // Marks the folder as ours even when not a single line ever gets logged, so
+    // uninstall can clear an empty one without touching an unrelated "logs" directory.
+    fs.writeFileSync(path.join(logsDir, ".reasoning-proxy"), "", { flag: "a" });
   } catch {}
 
   const stdoutPath = path.join(logsDir, "proxy.log");
