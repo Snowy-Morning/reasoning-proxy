@@ -356,6 +356,17 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// listen() reports failures as an event, not a throw. Without a handler Node
+// prints a raw stack trace for the case users hit most: the port is busy.
+server.on("error", (err) => {
+  const hint =
+    err.code === "EADDRINUSE"
+      ? "port is busy; stop the running instance or set another PROXY_PORT in config.bat"
+      : err.message;
+  console.error(`[proxy] cannot listen on 127.0.0.1:${PROXY_PORT}: ${hint}`);
+  process.exit(1);
+});
+
 server.listen(PROXY_PORT, "127.0.0.1", () => {
   console.log(`[proxy] listening on http://127.0.0.1:${PROXY_PORT}`);
   console.log(`[proxy] forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
