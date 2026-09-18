@@ -13,7 +13,7 @@ Reasoning Proxy 是一个本地 HTTP 反向代理，附带一个 WPF 图形界�
 - 对 JSON POST 请求自动注入缺失的 `reasoning_effort`。
 - 模型名包含 `kimi` 时，把 `temperature` 和 `top_p` 改写为配置值。
 - 提供图形界面，可查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
-- 图形界面里勾一下「开机自启」，登录后代理就在后台跑起来，不需要显示任何窗口。
+- 图形界面里勾一下「开机自启」，登录之后界面和代理都已经在跑，不用再点一次启动。
 - 一键把上游模型列表同步进 VS Code 的 `chatLanguageModels.json`，同步前可以在表格里逐个勾选模型、改上下文窗口和图片处理，勾选结果就是最终列表。
 - 支持打包为单文件 exe，内置 Node.js 运行时、代理脚本、GUI 脚本、图标和默认配置。
 
@@ -135,7 +135,8 @@ dist\ReasoningProxy.exe
 打包版使用方式：
 
 - 双击 `ReasoningProxy.exe`：打开图形界面。
-- 执行 `ReasoningProxy.exe --proxy`：后台代理模式。
+- 执行 `ReasoningProxy.exe --proxy`：后台代理模式，只跑代理，不开界面。
+- 执行 `ReasoningProxy.exe --login`：打开图形界面并顺手启动代理，开机自启走的就是这一条。
 - 执行 `ReasoningProxy.exe --autostart enable|disable|status`：开关登录时自动启动，`status` 打印 `status=on` 或 `status=off`。图形界面里的勾选框做的就是这件事。
 - 执行 `ReasoningProxy.exe --uninstall`：清理本工具生成的运行文件，见「卸载」。
 - 执行 `ReasoningProxy.exe --uninstall --purge`：连 `ReasoningProxy.exe` 一起删掉，也就是「设置 → 应用」里那个卸载按钮所做的全部事情。
@@ -197,7 +198,7 @@ node .\scripts\proxy.js
 界面提供以下功能：
 
 - 显示代理运行状态、进程 PID、本地地址、目标地址和 Kimi 参数。
-- 状态卡片右侧有「开机自启」勾选框，勾选状态读的是注册表里那个启动项，所以换台机器、重装一次都能对上。取消勾选即关闭。源码模式下没有可登记的 exe，这一项会隐藏。
+- 状态卡片右侧有「开机自启」勾选框，勾上之后登录会打开界面并把代理启动起来。勾选状态读的是注册表里那个启动项，所以换台机器、重装一次都能对上。取消勾选即关闭。源码模式下没有可登记的 exe，这一项会隐藏。
 - 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入配置，下一次请求立即生效。
 - 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
 - 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可退出界面。
@@ -372,11 +373,11 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 
 勾选「开机自启」会在 `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` 下写一个名为 `ReasoningProxy` 的值，取消勾选就删掉它。这个键是当前用户的，不需要管理员权限，也只影响你自己，不影响同一台机器上的其他账号。
 
-启动项指向的不是 `ReasoningProxy.exe`，而是 `%LOCALAPPDATA%\ReasoningProxy\autostart.vbs`，由 `wscript.exe` 无窗口地把它跑起来，脚本内容只有一行 `shell.Run`，加 `--proxy` 启动代理。原因是 exe 是控制台程序，启动项直接指过去的话每次登录都会闪一个黑框出来；`gui.vbs` 隐藏 GUI 用的是同一招。
+启动项指向的不是 `ReasoningProxy.exe`，而是 `%LOCALAPPDATA%\ReasoningProxy\autostart.vbs`，由 `wscript.exe` 无窗口地把它跑起来，脚本内容只有一行 `shell.Run`，带 `--login` 打开界面并启动代理。原因是 exe 是控制台程序，启动项直接指过去的话每次登录都会闪一个黑框出来；`gui.vbs` 隐藏 GUI 用的是同一招。
 
 脚本固定在 `%LOCALAPPDATA%` 而不是 exe 旁边，是因为 exe 会被随手挪动：注册表里记的那个路径始终不变，只有脚本内容里写着 exe 的真实位置，所以挪完之后下次启动会自己把脚本改过来，注册表不用重写。同理，脚本要是被手动删了，下次启动也会补回去。启动项不是本工具的（那个值名指向别的东西）时，勾选框显示为未勾选，启动也不会去动它。
 
-自启拉起的是后台代理，不打开图形界面、不放托盘图标，配置和日志用的还是同一套。要停掉它：打开图形界面点「停止代理」，或者 `scripts\stop.bat`。
+所以自启等于登录之后重放一次「打开界面 + 点启动代理」：窗口在、托盘图标在、端口已经在监听，界面一打开就写着运行中。登录时代理要是在跑（注销前没停），界面不会再起一个，只会显示运行中；那台代理本来就在，配置和日志也是同一套。要停就是界面里那个「停止代理」，或者 `scripts\stop.bat`。
 
 ## 卸载
 
