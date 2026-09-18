@@ -190,6 +190,79 @@ function Stop-Proxy {
     Update-Status
 }
 
+function Get-AutostartExe {
+    # The Run key has to name a real binary, and the registry entry is written by the
+    # packaged exe, so a source checkout, which starts the proxy through start.bat,
+    # has nothing here to register.
+    if ($env:REASONING_PROXY_EXE -and (Test-Path -LiteralPath $env:REASONING_PROXY_EXE)) {
+        return $env:REASONING_PROXY_EXE
+    }
+    return $null
+}
+
+# The exe owns the registry layout; this only reads back the status= line it prints.
+function Invoke-Autostart([string]$Action) {
+    $exe = Get-AutostartExe
+    if (-not $exe) {
+        return $null
+    }
+    $lines = @()
+    try {
+        $lines = @(& $exe '--autostart' $Action 2>&1 | ForEach-Object { [string]$_ })
+    } catch {
+        return [pscustomobject]@{ On = $false; Ok = $false; Message = $_.Exception.Message }
+    }
+    $text = $lines -join ' '
+    $ok = ($LASTEXITCODE -eq 0)
+    $message = (@($lines | Where-Object { $_ -match '^\[autostart\] ' } |
+        ForEach-Object { ($_ -replace '^\[autostart\] ', '') -replace '^status=\w+$', '' }) -join ' ')
+    return [pscustomobject]@{
+        On = ($text -match 'status=on')
+        Ok = $ok
+        Message = $message
+    }
+}
+
+function Set-AutostartCheckState([bool]$On) {
+    $script:autostartBusy = $true
+    try {
+        $script:autostartCheck.IsChecked = $On
+    } finally {
+        $script:autostartBusy = $false
+    }
+}
+
+function Sync-AutostartCheck {
+    $result = Invoke-Autostart 'status'
+    if (-not $result) {
+        # No exe to register, so nothing to offer.
+        $script:autostartCheck.Visibility = 'Collapsed'
+        return
+    }
+    Set-AutostartCheckState ([bool]$result.On)
+}
+
+function Set-Autostart([bool]$Enable) {
+    if ($script:autostartBusy) {
+        return
+    }
+    $script:autostartBusy = $true
+    try {
+        $result = Invoke-Autostart $(if ($Enable) { 'enable' } else { 'disable' })
+        if ($result) {
+            $script:autostartCheck.IsChecked = [bool]$result.On
+            if (-not $result.Ok) {
+                $why = if ($result.Message) { $result.Message } else { 'unknown error' }
+                if ($script:notifyIcon) {
+                    $script:notifyIcon.ShowBalloonTip(6000, '开机自启', $why, [System.Windows.Forms.ToolTipIcon]::Warning)
+                }
+            }
+        }
+    } finally {
+        $script:autostartBusy = $false
+    }
+}
+
 function Update-EffortButtons {
     $selectedBrush = New-Brush '#4ADE80'
     $mutedBrush = New-Brush '#949EB4'
@@ -1173,6 +1246,54 @@ $xaml = @'
     SnapsToDevicePixels="True"
     TextOptions.TextFormattingMode="Display">
     <Window.Resources>
+        <!-- Same box the model list uses, so a tick looks like a tick everywhere. -->
+        <Style x:Key="CheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#DCE3F2"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Border x:Name="box" Width="18" Height="18" CornerRadius="5" VerticalAlignment="Center"
+                                    Background="#161A25" BorderBrush="#48546F" BorderThickness="1"
+                                    SnapsToDevicePixels="True">
+                                <Path x:Name="tick" Width="16" Height="16" Stretch="None" Opacity="0"
+                                      Data="M 3.4,8.4 L 6.6,11.6 L 12.6,4.4"
+                                      Stroke="#FFFFFF" StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                            </Border>
+                            <ContentPresenter x:Name="cp" Margin="10,0,0,0" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="box" Property="BorderBrush" Value="#78849F"/>
+                                <Setter TargetName="box" Property="Background" Value="#1E2434"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="box" Property="Background" Value="#7F7EFC"/>
+                                <Setter TargetName="box" Property="BorderBrush" Value="#7F7EFC"/>
+                                <Setter TargetName="tick" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="box" Property="Background" Value="#8F8EFF"/>
+                                <Setter TargetName="box" Property="BorderBrush" Value="#8F8EFF"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#5D6880"/>
+                                <Setter TargetName="box" Property="Opacity" Value="0.35"/>
+                                <Setter TargetName="cp" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="AccentButton" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Background" Value="#7F7EFC"/>
@@ -1490,12 +1611,17 @@ $xaml = @'
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Row="0" Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center">
                             <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#949EB4" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
                         <TextBlock x:Name="StatusText" Grid.Row="0" Grid.Column="1" Text="未运行" FontSize="18" FontWeight="Bold" Foreground="#949EB4" VerticalAlignment="Center" Margin="10,0,0,0"/>
                         <TextBlock x:Name="PidText" Grid.Row="1" Grid.Column="1" Text="等待启动" FontSize="12" Foreground="#949EB4" Margin="10,4,0,0"/>
+                        <CheckBox x:Name="AutostartCheck" Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
+                                  Style="{StaticResource CheckBoxStyle}" Content="开机自启" FontSize="12"
+                                  Foreground="#949EB4" VerticalAlignment="Center" Margin="16,0,0,0"
+                                  ToolTip="登录后自动在后台启动代理，不显示窗口；取消勾选即关闭"/>
                     </Grid>
                 </Border>
 
@@ -1578,6 +1704,7 @@ $logPanel = $window.FindName('LogPanel')
 $logTextBox = $window.FindName('LogTextBox')
 $syncButton = $window.FindName('SyncButton')
 $syncResultText = $window.FindName('SyncResultText')
+$autostartCheck = $window.FindName('AutostartCheck')
 
 $script:statusDot = $statusDot
 $script:statusText = $statusText
@@ -1590,6 +1717,8 @@ $script:logPanel = $logPanel
 $script:logTextBox = $logTextBox
 $script:syncButton = $syncButton
 $script:syncResultText = $syncResultText
+$script:autostartCheck = $autostartCheck
+$script:autostartBusy = $false
 
 $script:effortLevels = @('low', 'medium', 'high', 'max')
 $script:effortButtons = @()
@@ -1653,6 +1782,10 @@ $startButton.Add_Click({ Start-Proxy })
 $stopButton.Add_Click({ Stop-Proxy })
 $logToggleButton.Add_Click({ Toggle-LogPanel })
 $syncButton.Add_Click({ Sync-LanguageModelsConfig })
+# Checked/Unchecked rather than Click: the state events also fire when the box is
+# toggled from a keyboard or an accessibility tool, where Click does not.
+$autostartCheck.Add_Checked({ Set-Autostart $true })
+$autostartCheck.Add_Unchecked({ Set-Autostart $false })
 $closeButton.Add_Click({ $window.Close() })
 $header.Add_MouseLeftButtonDown({ $window.DragMove() })
 
@@ -1715,6 +1848,7 @@ $refreshTimer.Add_Tick({
 $refreshTimer.Start()
 
 Update-Status
+Sync-AutostartCheck
 Run-LmAutoSync
 
 $app = New-Object System.Windows.Application
