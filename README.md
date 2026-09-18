@@ -13,6 +13,7 @@ Reasoning Proxy 是一个本地 HTTP 反向代理，附带一个 WPF 图形界�
 - 对 JSON POST 请求自动注入缺失的 `reasoning_effort`。
 - 模型名包含 `kimi` 时，把 `temperature` 和 `top_p` 改写为配置值。
 - 提供图形界面，可查看运行状态、切换推理等级、查看日志，并常驻系统托盘。
+- 图形界面里勾一下「开机自启」，登录后代理就在后台跑起来，不需要显示任何窗口。
 - 一键把上游模型列表同步进 VS Code 的 `chatLanguageModels.json`，同步前可以在表格里逐个勾选模型、改上下文窗口和图片处理，勾选结果就是最终列表。
 - 支持打包为单文件 exe，内置 Node.js 运行时、代理脚本、GUI 脚本、图标和默认配置。
 
@@ -135,6 +136,7 @@ dist\ReasoningProxy.exe
 
 - 双击 `ReasoningProxy.exe`：打开图形界面。
 - 执行 `ReasoningProxy.exe --proxy`：后台代理模式。
+- 执行 `ReasoningProxy.exe --autostart enable|disable|status`：开关登录时自动启动，`status` 打印 `status=on` 或 `status=off`。图形界面里的勾选框做的就是这件事。
 - 执行 `ReasoningProxy.exe --uninstall`：清理本工具生成的运行文件，见「卸载」。
 - 执行 `ReasoningProxy.exe --uninstall --purge`：连 `ReasoningProxy.exe` 一起删掉，也就是「设置 → 应用」里那个卸载按钮所做的全部事情。
 - 打包版启动时会把自己登记到 Windows 的「设置 → 应用」里，在那里能看到「Reasoning Proxy」和它的卸载按钮；不想用命令行时从那里卸。
@@ -195,6 +197,7 @@ node .\scripts\proxy.js
 界面提供以下功能：
 
 - 显示代理运行状态、进程 PID、本地地址、目标地址和 Kimi 参数。
+- 状态卡片右侧有「开机自启」勾选框，勾选状态读的是注册表里那个启动项，所以换台机器、重装一次都能对上。取消勾选即关闭。源码模式下没有可登记的 exe，这一项会隐藏。
 - 推理等级支持 `low` / `medium` / `high` / `max` 四档，点击后直接写入配置，下一次请求立即生效。
 - 点击“查看日志”可以在状态面板和日志面板之间切换，日志默认滚动到最新内容。
 - 关闭窗口不会停止代理，界面会隐藏到系统托盘；双击托盘图标可重新打开，右键托盘可退出界面。
@@ -365,6 +368,16 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 
 修改 `PROXY_PORT`、`TARGET_HOST`、`TARGET_PORT`、`KIMI_TEMPERATURE`、`KIMI_TOP_P` 后需要重启代理。推理等级不需要重启，修改后下一次请求立即生效。
 
+### 开机自启
+
+勾选「开机自启」会在 `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` 下写一个名为 `ReasoningProxy` 的值，取消勾选就删掉它。这个键是当前用户的，不需要管理员权限，也只影响你自己，不影响同一台机器上的其他账号。
+
+启动项指向的不是 `ReasoningProxy.exe`，而是 `%LOCALAPPDATA%\ReasoningProxy\autostart.vbs`，由 `wscript.exe` 无窗口地把它跑起来，脚本内容只有一行 `shell.Run`，加 `--proxy` 启动代理。原因是 exe 是控制台程序，启动项直接指过去的话每次登录都会闪一个黑框出来；`gui.vbs` 隐藏 GUI 用的是同一招。
+
+脚本固定在 `%LOCALAPPDATA%` 而不是 exe 旁边，是因为 exe 会被随手挪动：注册表里记的那个路径始终不变，只有脚本内容里写着 exe 的真实位置，所以挪完之后下次启动会自己把脚本改过来，注册表不用重写。同理，脚本要是被手动删了，下次启动也会补回去。启动项不是本工具的（那个值名指向别的东西）时，勾选框显示为未勾选，启动也不会去动它。
+
+自启拉起的是后台代理，不打开图形界面、不放托盘图标，配置和日志用的还是同一套。要停掉它：打开图形界面点「停止代理」，或者 `scripts\stop.bat`。
+
 ## 卸载
 
 单文件 portable 没有安装程序，所以不会有传统的 `uninstall.exe`。可用的卸载入口有两个，做的是同一件事：
@@ -378,12 +391,13 @@ Get-NetTCPConnection -LocalPort 3120 -State Listen |
 
 1. 结束仍在运行的本工具进程（图形界面和后台代理）。只匹配本程序的 exe 路径与它自己的数据目录，从源码目录里起的代理不会被波及。
 2. 从「设置 → 应用」的卸载登记表里删掉自己，列表里不会再留下点不动的条目。
-3. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
-4. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，或者它留下的归属标记 `.reasoning-proxy`；`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。只打开过图形界面、代理没跑起来时 `logs\` 会是空的，这时只有同目录的 `config.bat` 确实属于本工具才删，免得碰了别人建的空文件夹。旁边要是还留着旧版本生成的 `uninstall.bat`，也一并删掉，认的还是它第一行那个标记；手写的同名脚本原样留着，正在执行这次卸载的那一份也不去动，免得打断逐行读它的 cmd，那种情况由脚本自己的最后一行收尾。
-5. 清掉目标配置文件旁边的遗留备份，也就是备份搬家之前直接写在 VS Code 用户目录里的那些。这里的判定收得很紧：文件名必须是 `<目标文件名>.bak-yyyymmdd-HHMMSS` 这个完整格式，`chatLanguageModels.json.bak-legacy`、`settings.json.bak-20260101-000000` 这类都对不上，不会被误删。
-6. 打印处理结果。带 `--purge` 时还会往 `%TEMP%` 写一个几行的清理脚本并把它独立拉起：进程删不掉正在运行的自己，所以由它在 `ReasoningProxy.exe` 退出之后把 exe 删掉，接着如果 exe 所在的文件夹已经空了就把文件夹也删掉，里面还有别的文件就原样放着。这个清理脚本办完事把自己也删了，不会留在 `%TEMP%` 里。它是 VBScript 而不是批处理：独立拉起的进程没有控制台，批处理里唯一的等待手段是 `ping`，每等一次 Windows 就给它开一个新窗口，于是一次卸载会弹出一串 `ping -n 2 127.0.0.1`；`WScript.Sleep` 是脚本宿主自带的，不会开窗。
+3. 删掉开机自启：注册表 `Run` 里那个 `ReasoningProxy` 值，以及 `%LOCALAPPDATA%\ReasoningProxy\autostart.vbs`。没有勾选过就什么都不做；那个值名要是属于别的程序，也只报告不删。
+4. 删除 `%LOCALAPPDATA%\ReasoningProxy`，包含按版本生成的 `runtime` 目录、备用 `data` 目录，以及同步模型配置时产生的 `backups` 备份。
+5. 删除 exe 旁边属于 portable 用法的 `logs\` 和 `config\`。两处只在里面确实有本工具的东西时才动手：`logs\` 里要有它写过的日志名，或者它留下的归属标记 `.reasoning-proxy`；`config\config.bat` 里要有它的 `LM_*` 配置项。单纯重名的目录不会被碰。只打开过图形界面、代理没跑起来时 `logs\` 会是空的，这时只有同目录的 `config.bat` 确实属于本工具才删，免得碰了别人建的空文件夹。旁边要是还留着旧版本生成的 `uninstall.bat`，也一并删掉，认的还是它第一行那个标记；手写的同名脚本原样留着，正在执行这次卸载的那一份也不去动，免得打断逐行读它的 cmd，那种情况由脚本自己的最后一行收尾。
+6. 清掉目标配置文件旁边的遗留备份，也就是备份搬家之前直接写在 VS Code 用户目录里的那些。这里的判定收得很紧：文件名必须是 `<目标文件名>.bak-yyyymmdd-HHMMSS` 这个完整格式，`chatLanguageModels.json.bak-legacy`、`settings.json.bak-20260101-000000` 这类都对不上，不会被误删。
+7. 打印处理结果。带 `--purge` 时还会往 `%TEMP%` 写一个几行的清理脚本并把它独立拉起：进程删不掉正在运行的自己，所以由它在 `ReasoningProxy.exe` 退出之后把 exe 删掉，接着如果 exe 所在的文件夹已经空了就把文件夹也删掉，里面还有别的文件就原样放着。这个清理脚本办完事把自己也删了，不会留在 `%TEMP%` 里。它是 VBScript 而不是批处理：独立拉起的进程没有控制台，批处理里唯一的等待手段是 `ping`，每等一次 Windows 就给它开一个新窗口，于是一次卸载会弹出一串 `ping -n 2 127.0.0.1`；`WScript.Sleep` 是脚本宿主自带的，不会开窗。
 
-VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认在 `%LOCALAPPDATA%\ReasoningProxy\backups`，属于第 3 步，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`，第 5 步的遗留备份也会原样留着并报告有几个。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
+VS Code 的 `chatLanguageModels.json` 不会被修改或删除，因为里面可能有你自己手工添加的其他 provider。备份默认在 `%LOCALAPPDATA%\ReasoningProxy\backups`，属于第 4 步，所以会被一并清掉；想留下它们就加 `--keep-backups`，那样只删 `runtime` 和 `data`，第 6 步的遗留备份也会原样留着并报告有几个。无论哪种，命令都会打印删除前最近一个备份的路径，方便你在反悔时找回内容。如果你把 `LM_BACKUP_DIR` 指到了别处，卸载不会去动那个目录，只会把路径打印出来让你自己决定。
 
 想找回某次同步之前的配置，到 `<备份目录>\<编辑器目录名>-<路径摘要>\` 里按文件名里的时间戳挑一个，把内容复制回 `chatLanguageModels.json` 即可。
 
