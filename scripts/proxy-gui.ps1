@@ -1621,7 +1621,7 @@ $xaml = @'
                         <CheckBox x:Name="AutostartCheck" Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
                                   Style="{StaticResource CheckBoxStyle}" Content="开机自启" FontSize="12"
                                   Foreground="#949EB4" VerticalAlignment="Center" Margin="16,0,0,0"
-                                  ToolTip="登录后自动在后台启动代理，不显示窗口；取消勾选即关闭"/>
+                                  ToolTip="登录后自动打开界面并启动代理；取消勾选即关闭"/>
                     </Grid>
                 </Border>
 
@@ -1849,6 +1849,13 @@ $refreshTimer.Start()
 
 Update-Status
 Sync-AutostartCheck
+
+# 开机自启 opens the window and expects it to be working already. Only when nothing is
+# listening: a proxy that survived the sign-out, or one started by hand, is left alone.
+if ($env:REASONING_PROXY_AUTOSTART -eq '1' -and -not (Get-ProxyProcessId)) {
+    Start-Proxy
+}
+
 Run-LmAutoSync
 
 $app = New-Object System.Windows.Application
